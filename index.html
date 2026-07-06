@@ -285,6 +285,41 @@ const MECHS = [
   { name: "Star Crusher",  rarity: "legendary", hp: 360, speed: 245, price: 1100, color: "#fbbf24" },
   { name: "Omega Prime",   rarity: "legendary", hp: 400, speed: 240, price: 1250, color: "#f5a623" },
   { name: "Mega Destroyer",rarity: "legendary", hp: 500, speed: 230, price: 1500, color: "#ffd700" },
+  // ---- 30 more mechs ----
+  // COMMON
+  { name: "Junker",       rarity: "common",    hp: 95,  speed: 205, price: 130,  color: "#8a8f9c" },
+  { name: "Pebble",       rarity: "common",    hp: 100, speed: 210, price: 145,  color: "#909aa6" },
+  { name: "Crate",        rarity: "common",    hp: 130, speed: 185, price: 160,  color: "#8f7a5e" },
+  { name: "Wrench Bot",   rarity: "common",    hp: 110, speed: 200, price: 175,  color: "#7d8494" },
+  { name: "Bucket Head",  rarity: "common",    hp: 90,  speed: 220, price: 190,  color: "#9aa0ad" },
+  { name: "Cog",          rarity: "common",    hp: 105, speed: 215, price: 205,  color: "#84796b" },
+  { name: "Dumpster",     rarity: "common",    hp: 145, speed: 175, price: 220,  color: "#6f7686" },
+  { name: "Sprout",       rarity: "common",    hp: 88,  speed: 240, price: 235,  color: "#7f8a72" },
+  // RARE
+  { name: "Hornet",       rarity: "rare",      hp: 140, speed: 245, price: 380,  color: "#38bdf8" },
+  { name: "Tank Jr",      rarity: "rare",      hp: 210, speed: 185, price: 400,  color: "#2ea8d5" },
+  { name: "Comet",        rarity: "rare",      hp: 150, speed: 250, price: 420,  color: "#4f6ef7" },
+  { name: "Boulder",      rarity: "rare",      hp: 240, speed: 175, price: 440,  color: "#4682e0" },
+  { name: "Lynx",         rarity: "rare",      hp: 160, speed: 240, price: 460,  color: "#2dd4bf" },
+  { name: "Paladin",      rarity: "rare",      hp: 200, speed: 205, price: 480,  color: "#36a2eb" },
+  { name: "Cobra",        rarity: "rare",      hp: 155, speed: 245, price: 500,  color: "#3b82f6" },
+  { name: "Ironclad",     rarity: "rare",      hp: 230, speed: 180, price: 520,  color: "#5b8def" },
+  // MYTHIC
+  { name: "Specter",      rarity: "mythic",    hp: 210, speed: 260, price: 800,  color: "#a855f7" },
+  { name: "Warlord",      rarity: "mythic",    hp: 280, speed: 220, price: 850,  color: "#8b5cf6" },
+  { name: "Colossus",     rarity: "mythic",    hp: 350, speed: 180, price: 900,  color: "#9333ea" },
+  { name: "Reaper",       rarity: "mythic",    hp: 230, speed: 265, price: 950,  color: "#7c3aed" },
+  { name: "Tempest",      rarity: "mythic",    hp: 270, speed: 240, price: 1000, color: "#c026d3" },
+  { name: "Behemoth",     rarity: "mythic",    hp: 360, speed: 175, price: 1050, color: "#b565f0" },
+  { name: "Raven",        rarity: "mythic",    hp: 240, speed: 270, price: 1100, color: "#d946ef" },
+  { name: "Overlord",     rarity: "mythic",    hp: 300, speed: 230, price: 1150, color: "#a21caf" },
+  // LEGENDARY
+  { name: "Inferno King", rarity: "legendary", hp: 360, speed: 250, price: 1600, color: "#f97316" },
+  { name: "Void Reaper",  rarity: "legendary", hp: 420, speed: 210, price: 1700, color: "#ef4444" },
+  { name: "Titan Prime",  rarity: "legendary", hp: 460, speed: 235, price: 1800, color: "#fbbf24" },
+  { name: "Apocalypse",   rarity: "legendary", hp: 500, speed: 225, price: 1900, color: "#dc2626" },
+  { name: "Celestial",    rarity: "legendary", hp: 400, speed: 255, price: 2000, color: "#fde047" },
+  { name: "Annihilator",  rarity: "legendary", hp: 550, speed: 230, price: 2200, color: "#ffd700" },
 ];
 
 // ---- PRICES: commons cost 500-800 coins, and each rarity above is much pricier ----
@@ -591,7 +626,7 @@ const CODES = [
   { code: "TREASURE",       reward: "+15000 🪙",  apply: () => save.coins += 15000 },
   { code: "DIAMONDS",       reward: "+25000 🪙",  apply: () => save.coins += 25000 },
   { code: "BILLIONAIRE",    reward: "+50000 🪙",  apply: () => save.coins += 50000 },
-  { code: "INFINITY",       reward: "+100000 🪙", apply: () => save.coins += 100000 },
+  { code: "INFINITY",       reward: "+100000 🪙 (reusable!)", repeatable: true, apply: () => save.coins += 100000 },
 ];
 
 function redeemCode(raw) {
@@ -603,13 +638,13 @@ function redeemCode(raw) {
     msg.textContent = "❌ That's not a real code";
     msg.style.color = "#ef4444";
     beep(140, 0.2, "sawtooth", 0.1, 90);
-  } else if (save.codesUsed[found.code]) {
+  } else if (!found.repeatable && save.codesUsed[found.code]) {
     msg.textContent = "⚠ You already used that code";
     msg.style.color = "#f5c542";
     sndClick();
   } else {
     found.apply();
-    save.codesUsed[found.code] = true;
+    if (!found.repeatable) save.codesUsed[found.code] = true;   // reusable codes never get marked used
     persist();
     msg.textContent = "✅ Secret code worked! " + found.reward;
     msg.style.color = "#22c55e";
