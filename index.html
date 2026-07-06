@@ -172,7 +172,7 @@
   </div>
   <div class="modeBox">
     <div class="modeTitle">👹 BOSS FIGHT</div>
-    <div class="modeDesc">Team up with a squad vs a bunch of GIANT mega-bosses with tons of health!</div>
+    <div class="modeDesc">Team up with a squad vs ONE GIANT mega-boss with a massive health bar!</div>
     <div class="sliderRow"><input type="range" id="bossSlider" min="1" max="30" value="4"><span id="bossLabel">You + 3 allies</span></div>
     <button class="btn" id="btnPlayBoss">▶ FIGHT BOSSES</button>
   </div>
@@ -961,7 +961,7 @@ function startMatch(cfg) {
   matchTeamSize = size;
   lastCfg = { mode: matchMode, size };
   let numBosses = 0;
-  if (matchMode === "boss") numBosses = clamp(Math.round(size / 4) + 2, 2, 15);   // a bunch of bosses!
+  if (matchMode === "boss") numBosses = 1;   // ONE big boss!
   const total = matchMode === "teams" ? size * 2 : matchMode === "boss" ? size + numBosses : size;
   difficulty = rankIndexFor(save.wins);      // higher rank = tougher enemies AND more coins
   // coins scale with BOTH how many mechs are fighting AND your rank
@@ -1011,17 +1011,17 @@ function startMatch(cfg) {
     for (let i = 0; i < size; i++)     addBot("B", rightReg, true);   // the enemy team (buffed)
   } else if (matchMode === "boss") {
     for (let i = 0; i < size - 1; i++) addBot("A", leftReg, false);   // your squad of allies
+    // ONE giant mega-boss — bigger and tankier the bigger your squad + rank
     const legs = MECHS.filter(m => m.rarity === "legendary");
-    const bGuns = ["cannon", "rifle", "minigun", "plasma", "rocket"];
-    for (let i = 0; i < numBosses; i++) {                              // a bunch of giant bosses!
-      const m = legs[Math.floor(Math.random() * legs.length)];
-      const s = findSpot(50, null, 0, rightReg);
-      const b = makeFighter(s.x, s.y, m, { type: bGuns[Math.floor(Math.random() * bGuns.length)], rarity: "legendary", level: 1 }, false, "👹 BOSS " + (i + 1), "B");
-      b.isBoss = true;
-      b.maxHp = Math.round(m.hp * (16 + difficulty * 1.5));   // WAY more health than you
-      b.hp = b.maxHp; b.r = 44; b.speed *= 0.72; b.aimErr = 0.12;
-      bots.push(b);
-    }
+    const bGuns = ["cannon", "minigun", "plasma", "rocket"];
+    const m = legs[Math.floor(Math.random() * legs.length)];
+    const br = clamp(62 + size, 62, 105);
+    const s = findSpot(br, null, 0, rightReg);
+    const b = makeFighter(s.x, s.y, m, { type: bGuns[Math.floor(Math.random() * bGuns.length)], rarity: "legendary", level: 1 }, false, "👹 MEGA BOSS", "B");
+    b.isBoss = true;
+    b.maxHp = Math.round(m.hp * (14 + difficulty) * (1 + size * 0.4));   // a HUGE health bar
+    b.hp = b.maxHp; b.r = br; b.speed *= 0.6; b.aimErr = 0.14;
+    bots.push(b);
   } else {
     for (let i = 0; i < size - 1; i++) addBot("ffa" + i, null, true); // everyone for themselves (buffed)
   }
@@ -1038,7 +1038,7 @@ function startMatch(cfg) {
   moveStick = null; aimStick = null; dashPressed = false;
   cam.x = player.x - canvas.width / 2; cam.y = player.y - canvas.height / 2;
   const modeMsg = matchMode === "teams" ? " — " + size + "v" + size + " — wipe out the 🟥 RED team!"
-                : matchMode === "boss"  ? " — 👹 BOSS FIGHT — beat " + numBosses + " bosses with your squad!"
+                : matchMode === "boss"  ? " — 👹 BOSS FIGHT — take down the MEGA BOSS with your squad!"
                 : " — " + size + "-player FREE FOR ALL — GO!";
   banner("🗺️ " + curMap.name + modeMsg, "#22d3ee");
   if (curMap.hazard) banner("⚡ BONUS MAP — watch out, it shoots bullets!", "#ffca3a");
@@ -1605,6 +1605,18 @@ function draw() {
   } else {
     const alive = fighters().filter(f => f.alive).length;
     ctx.fillText("🤖 " + alive + " LEFT", canvas.width - 20, 84);
+  }
+
+  // big MEGA BOSS health bar across the top
+  if (matchMode === "boss") {
+    const boss = bots.find(b => b.isBoss && b.alive);
+    if (boss) {
+      const bw = Math.min(580, canvas.width - 90), bx = (canvas.width - bw) / 2, by = 46;
+      ctx.fillStyle = "rgba(0,0,0,0.55)"; ctx.fillRect(bx - 2, by - 2, bw + 4, 22);
+      ctx.fillStyle = "#ef4444"; ctx.fillRect(bx, by, bw * clamp(boss.hp / boss.maxHp, 0, 1), 18);
+      ctx.fillStyle = "#fff"; ctx.font = "bold 13px Arial"; ctx.textAlign = "center";
+      ctx.fillText("👹 MEGA BOSS   " + Math.ceil(Math.max(0, boss.hp)) + " / " + boss.maxHp, canvas.width / 2, by + 13);
+    }
   }
 
   // your mech + gun
