@@ -170,6 +170,12 @@
     <div class="sliderRow"><input type="range" id="teamSlider" min="1" max="50" value="3"><span id="teamLabel">3 v 3</span></div>
     <button class="btn" id="btnPlayTeams">▶ PLAY TEAMS</button>
   </div>
+  <div class="modeBox">
+    <div class="modeTitle">👹 BOSS FIGHT</div>
+    <div class="modeDesc">Team up with a squad vs a bunch of GIANT mega-bosses with tons of health!</div>
+    <div class="sliderRow"><input type="range" id="bossSlider" min="1" max="30" value="4"><span id="bossLabel">You + 3 allies</span></div>
+    <button class="btn" id="btnPlayBoss">▶ FIGHT BOSSES</button>
+  </div>
   <button class="btn" id="btnModeBack">⬅ BACK</button>
 </div>
 
@@ -443,7 +449,23 @@ const MAPS = [
   { name: "Galaxy",        floor: "#0f0c1f", block: "#241a4a", layout: "maze" },
 ];
 // precompute the lighter top / darker edge / border color for each map
-MAPS.forEach(m => { m._top = shade(m.block, 28); m._edge = shade(m.block, -34); m._border = shade(m.block, 46); });
+// which decoration theme + whether it's a "bonus" map that shoots bullets
+const DECOR = {
+  Ocean: "water", "Coral Reef": "water", "Deep Sea": "water", Aurora: "water",
+  "Lava Pit": "lava", Volcano: "lava", Inferno: "lava",
+  Forest: "forest", Jungle: "forest", Meadow: "forest", Grassland: "forest",
+  Desert: "desert", Mars: "desert", Wasteland: "desert", "Rust Yard": "desert",
+  "Ice World": "ice", Arctic: "ice", Snowfield: "ice",
+  "Neon City": "space", "Cyber Grid": "space", "Space Station": "space", Galaxy: "space",
+  "Candy Land": "candy", Sakura: "candy", Sunset: "candy", Twilight: "candy",
+  Midnight: "dark", "Toxic Swamp": "dark", Cave: "dark", Obsidian: "dark",
+};
+const HAZARD = new Set(["Lava Pit", "Inferno", "Volcano", "Space Station", "Cyber Grid", "Neon City"]);
+MAPS.forEach(m => {
+  m._top = shade(m.block, 28); m._edge = shade(m.block, -34); m._border = shade(m.block, 46);
+  m.decor = DECOR[m.name] || "dark";
+  m.hazard = HAZARD.has(m.name);   // "bonus" maps that shoot bullets at everyone
+});
 
 // builds the cover blocks for a map's layout, inside a W x H world
 function genBlocks(layout, W, H, n) {
@@ -476,6 +498,16 @@ function genBlocks(layout, W, H, n) {
   return B;
 }
 let curMap = MAPS[0];
+let decor = { items: [], floats: [] };   // themed scenery for the current map
+
+// makes the scenery for a map: ground "items" (plants/rocks) + floating particles
+function genDecor(W, H) {
+  const items = [], floats = [];
+  const ni = Math.min(90, Math.round(W * H / 65000)), nf = Math.min(150, Math.round(W * H / 38000));
+  for (let i = 0; i < ni; i++) items.push({ x: 40 + Math.random() * (W - 80), y: 40 + Math.random() * (H - 80), s: 0.7 + Math.random() * 1.1, p: Math.random() * 6.28, k: Math.random() });
+  for (let i = 0; i < nf; i++) floats.push({ x: Math.random() * W, y: Math.random() * H, s: 0.6 + Math.random() * 1.3, p: Math.random() * 6.28, k: Math.random() });
+  return { items, floats };
+}
 
 // =====================================================================
 //  SAVING — coins, wins, and everything you bought get saved in the
@@ -583,11 +615,14 @@ function syncModeLabels() {
   $("ffaLabel").textContent = (+$("ffaSlider").value) + " players";
   const t = +$("teamSlider").value;
   $("teamLabel").textContent = t + " v " + t;
+  $("bossLabel").textContent = "You + " + (+$("bossSlider").value - 1) + " allies";
 }
 $("ffaSlider").addEventListener("input", syncModeLabels);
 $("teamSlider").addEventListener("input", syncModeLabels);
+$("bossSlider").addEventListener("input", syncModeLabels);
 $("btnPlayFFA").onclick   = () => { sndClick(); startMatch({ mode: "ffa",   size: +$("ffaSlider").value }); };
 $("btnPlayTeams").onclick = () => { sndClick(); startMatch({ mode: "teams", size: +$("teamSlider").value }); };
+$("btnPlayBoss").onclick  = () => { sndClick(); startMatch({ mode: "boss",  size: +$("bossSlider").value }); };
 $("btnModeBack").onclick  = () => { sndClick(); goMenu(); };
 
 // ---------- map select (30 maps + a random option) ----------
@@ -606,7 +641,7 @@ function renderMaps() {
     list.appendChild(card);
   };
   makeCard(-1, "🎲 Random", "#0f1220", "#3a4266");
-  MAPS.forEach((m, i) => makeCard(i, m.name, m.floor, m.block));
+  MAPS.forEach((m, i) => makeCard(i, m.name + (m.hazard ? " ⚡" : ""), m.floor, m.block));
 }
 $("btnMaps").onclick = () => { sndClick(); renderMaps(); showScreen("mapScreen"); };
 $("btnMapBack").onclick = () => { sndClick(); goMenu(); };
@@ -826,7 +861,7 @@ const BOT_NAMES = ["Blaze", "ShadowX", "NoScope99", "Pickle", "DragonSlayer", "S
 
 let player, bots = [], blocks = [], bullets = [], particles = [], floaties = [], banners = [], healthPacks = [];
 let cam = { x: 0, y: 0 }, shake = 0, gameTime = 0, flash = 0, paused = false;
-let matchKills = 0, matchOver = false, streak = 0, lastKillTime = -99;
+let matchKills = 0, matchOver = false, streak = 0, lastKillTime = -99, bonusCoins = 0, hazardT = 0;
 const keys = {};
 let mouse = { x: 0, y: 0, down: false };
 // phone touch controls: left thumbstick moves, right thumbstick aims+fires
@@ -840,7 +875,7 @@ let matchCoinMult = 1;
 const killCoins = () => Math.round(BASE_KILL * matchCoinMult);
 const playCoins = () => Math.round(BASE_PLAY * matchCoinMult);
 const winCoins  = () => Math.round(BASE_WIN * matchCoinMult);
-const matchEarned = () => matchKills * killCoins();
+const matchEarned = () => matchKills * killCoins() + bonusCoins;
 
 // ---------- collision helpers ----------
 function collideCircleRect(cx, cy, r, b) {
@@ -916,11 +951,13 @@ function botNameFor(i) {
 
 function startMatch(cfg) {
   cfg = cfg || lastCfg;
-  matchMode = cfg.mode === "teams" ? "teams" : "ffa";
-  const size = clamp(Math.round(cfg.size) || 6, matchMode === "teams" ? 1 : 2, 50);
+  matchMode = cfg.mode === "teams" ? "teams" : cfg.mode === "boss" ? "boss" : "ffa";
+  const size = clamp(Math.round(cfg.size) || 6, matchMode === "ffa" ? 2 : 1, 50);
   matchTeamSize = size;
   lastCfg = { mode: matchMode, size };
-  const total = matchMode === "teams" ? size * 2 : size;
+  let numBosses = 0;
+  if (matchMode === "boss") numBosses = clamp(Math.round(size / 4) + 2, 2, 15);   // a bunch of bosses!
+  const total = matchMode === "teams" ? size * 2 : matchMode === "boss" ? size + numBosses : size;
   difficulty = rankIndexFor(save.wins);      // higher rank = tougher enemies AND more coins
   // coins scale with BOTH how many mechs are fighting AND your rank
   matchCoinMult = clamp(total / 6, 1, 10) * (1 + difficulty * 0.2);
@@ -941,11 +978,12 @@ function startMatch(cfg) {
   const leftReg  = { x0: 60, x1: WORLD.w * 0.4, y0: 60, y1: WORLD.h - 60 };
   const rightReg = { x0: WORLD.w * 0.6, x1: WORLD.w - 60, y0: 60, y1: WORLD.h - 60 };
 
-  // you — team "A" in team mode, or your own solo team in FFA
+  // you — team "A" in team/boss mode, or your own solo team in FFA
+  const onTeam = matchMode === "teams" || matchMode === "boss";
   const myMech = MECHS[save.mechEquipped];
   const pr = 15 + Math.round(myMech.hp / 50);
-  const pSpot = findSpot(pr, null, 0, matchMode === "teams" ? leftReg : null);
-  player = makeFighter(pSpot.x, pSpot.y, myMech, equippedGun(), true, "YOU", matchMode === "teams" ? "A" : "you");
+  const pSpot = findSpot(pr, null, 0, onTeam ? leftReg : null);
+  player = makeFighter(pSpot.x, pSpot.y, myMech, equippedGun(), true, "YOU", onTeam ? "A" : "you");
 
   // the other mechs. Enemies get tougher the higher your rank is.
   bots = [];
@@ -966,6 +1004,19 @@ function startMatch(cfg) {
   if (matchMode === "teams") {
     for (let i = 0; i < size - 1; i++) addBot("A", leftReg, false);   // your teammates (normal)
     for (let i = 0; i < size; i++)     addBot("B", rightReg, true);   // the enemy team (buffed)
+  } else if (matchMode === "boss") {
+    for (let i = 0; i < size - 1; i++) addBot("A", leftReg, false);   // your squad of allies
+    const legs = MECHS.filter(m => m.rarity === "legendary");
+    const bGuns = ["cannon", "rifle", "minigun", "plasma", "rocket"];
+    for (let i = 0; i < numBosses; i++) {                              // a bunch of giant bosses!
+      const m = legs[Math.floor(Math.random() * legs.length)];
+      const s = findSpot(50, null, 0, rightReg);
+      const b = makeFighter(s.x, s.y, m, { type: bGuns[Math.floor(Math.random() * bGuns.length)], rarity: "legendary", level: 1 }, false, "👹 BOSS " + (i + 1), "B");
+      b.isBoss = true;
+      b.maxHp = Math.round(m.hp * (16 + difficulty * 1.5));   // WAY more health than you
+      b.hp = b.maxHp; b.r = 44; b.speed *= 0.72; b.aimErr = 0.12;
+      bots.push(b);
+    }
   } else {
     for (let i = 0; i < size - 1; i++) addBot("ffa" + i, null, true); // everyone for themselves (buffed)
   }
@@ -975,13 +1026,17 @@ function startMatch(cfg) {
   const numPacks = Math.min(24, Math.round(5 * scale));
   for (let i = 0; i < numPacks; i++) healthPacks.push({ ...findSpot(20, player, 140), taken: false, cd: 0 });
 
+  decor = genDecor(WORLD.w, WORLD.h);   // themed scenery for this map
   bullets = []; particles = []; floaties = []; banners = [];
-  matchKills = 0; matchOver = false; shake = 0; gameTime = 0; flash = 0;
-  streak = 0; lastKillTime = -99; paused = false;
+  matchKills = 0; bonusCoins = 0; matchOver = false; shake = 0; gameTime = 0; flash = 0;
+  streak = 0; lastKillTime = -99; paused = false; hazardT = 2.5;
   moveStick = null; aimStick = null; dashPressed = false;
   cam.x = player.x - canvas.width / 2; cam.y = player.y - canvas.height / 2;
-  banner("🗺️ " + curMap.name + (matchMode === "teams" ? " — " + size + "v" + size + " — wipe out the 🟥 RED team!"
-                                                        : " — " + size + "-player FREE FOR ALL — GO!"), "#22d3ee");
+  const modeMsg = matchMode === "teams" ? " — " + size + "v" + size + " — wipe out the 🟥 RED team!"
+                : matchMode === "boss"  ? " — 👹 BOSS FIGHT — beat " + numBosses + " bosses with your squad!"
+                : " — " + size + "-player FREE FOR ALL — GO!";
+  banner("🗺️ " + curMap.name + modeMsg, "#22d3ee");
+  if (curMap.hazard) banner("⚡ BONUS MAP — watch out, it shoots bullets!", "#ffca3a");
   if (difficulty > 0) banner("☠ Enemies scaled to " + rankOf(save.wins).name + " rank!", "#ff8a8a");
   showScreen(null);
   state = "game";
@@ -989,6 +1044,22 @@ function startMatch(cfg) {
 
 function banner(txt, color = "#fff") { banners.unshift({ txt, color, life: 3 }); banners = banners.slice(0, 4); }
 function floaty(x, y, txt, color = "#fff") { floaties.push({ x, y, txt, color, life: 1 }); }
+
+// ---------- bonus-map hazard: the map shoots bullets from the edges ----------
+function fireHazard() {
+  const n = 2 + Math.floor(Math.random() * 3);
+  for (let i = 0; i < n; i++) {
+    const edge = Math.floor(Math.random() * 4);
+    let x, y, ang;
+    if (edge === 0)      { x = Math.random() * WORLD.w; y = 0;        ang = Math.PI / 2 + (Math.random() - 0.5) * 0.8; }
+    else if (edge === 1) { x = Math.random() * WORLD.w; y = WORLD.h;  ang = -Math.PI / 2 + (Math.random() - 0.5) * 0.8; }
+    else if (edge === 2) { x = 0;        y = Math.random() * WORLD.h; ang = 0 + (Math.random() - 0.5) * 0.8; }
+    else                 { x = WORLD.w;  y = Math.random() * WORLD.h; ang = Math.PI + (Math.random() - 0.5) * 0.8; }
+    const spd = 10 * 45;
+    bullets.push({ x, y, vx: Math.cos(ang) * spd, vy: Math.sin(ang) * spd, dmg: 14, owner: null, color: "#ffca3a", life: 6, big: true });
+  }
+  if (player.alive) beep(180, 0.12, "sawtooth", 0.05, 90);
+}
 
 // ---------- shooting ----------
 function tryShoot(f, angle) {
@@ -1032,7 +1103,8 @@ function hurt(f, dmg, killer) {
            killer && killer.isPlayer ? "#22c55e" : "#c3c9de");
     if (killer && killer.isPlayer && !f.isPlayer) {
       matchKills++;
-      floaty(f.x, f.y - 40, "+" + killCoins() + " 🪙", "#f5c542");
+      if (f.isBoss) { bonusCoins += killCoins() * 5; floaty(f.x, f.y - 44, "💥 BOSS DOWN! +" + (killCoins() * 6) + " 🪙", "#ffca3a"); }
+      else floaty(f.x, f.y - 40, "+" + killCoins() + " 🪙", "#f5c542");
       sndCoin();
       // KILL STREAK! two or more quick kills in a row gets a shout-out
       streak = (gameTime - lastKillTime < 4) ? streak + 1 : 1;
@@ -1092,7 +1164,9 @@ function endMatch(won, leftEarly) {
     const place = won ? 1 : bots.filter(b => b.alive).length + 1;
     $("endTitle").textContent = leftEarly ? "🏃 You left the match"
       : won ? "🏆 VICTORY!"
-      : (matchMode === "teams" ? "💥 DEFEAT — your team lost" : "💥 You placed #" + place);
+      : (matchMode === "teams" ? "💥 DEFEAT — your team lost"
+         : matchMode === "boss" ? "💥 DEFEAT — the bosses won"
+         : "💥 You placed #" + place);
     $("endTitle").style.color = won ? "#f5c542" : "#fff";
     // did this win push you up to a new rank?
     const rankedUp = won && rankIndexFor(save.wins + 1) > rankIndexFor(save.wins);
@@ -1128,6 +1202,9 @@ function endMatch(won, leftEarly) {
 // ---------- update everything each frame ----------
 function update(dt) {
   gameTime += dt;
+
+  // bonus maps periodically shoot bullets across the arena
+  if (curMap.hazard) { hazardT -= dt; if (hazardT <= 0) { fireHazard(); hazardT = 1 + Math.random() * 1.4; } }
 
   // --- you ---
   if (player.alive) {
@@ -1278,6 +1355,11 @@ function drawMech(f) {
   ctx.fillStyle = f.isPlayer ? "#7ef9ff" : (friend ? "#8ef0a0" : "#ff9b9b");
   ctx.beginPath(); ctx.arc(f.r * 0.22, 0, f.r * 0.17, 0, 7); ctx.fill();
   ctx.restore();
+  // bosses get a menacing pulsing red ring
+  if (f.isBoss) {
+    ctx.strokeStyle = "rgba(255,60,60," + (0.5 + 0.3 * Math.sin(gameTime * 5)) + ")"; ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.arc(f.x, f.y, f.r + 7, 0, 7); ctx.stroke();
+  }
   // name + health bar floating above
   ctx.fillStyle = f.isPlayer ? "#22d3ee" : (friend ? "#7CFC98" : "#ff9b9b");
   ctx.font = "bold 13px Arial"; ctx.textAlign = "center";
@@ -1287,6 +1369,75 @@ function drawMech(f) {
   const pct = Math.max(0, f.hp) / f.maxHp;
   ctx.fillStyle = pct > 0.55 ? "#22c55e" : pct > 0.25 ? "#f5c542" : "#ef4444";
   ctx.fillRect(f.x - 22, f.y - f.r - 14, 44 * pct, 6);
+}
+
+// ---------- themed map scenery (drawn under the blocks) ----------
+function drawDecorGround() {
+  const D = curMap.decor, W = WORLD.w, H = WORLD.h, t = gameTime;
+  if (D === "water") {
+    // sandy shore fading in from every edge
+    const sand = "rgba(205,178,120,";
+    let g = ctx.createLinearGradient(0, 0, 0, 230); g.addColorStop(0, sand + "0.85)"); g.addColorStop(1, sand + "0)"); ctx.fillStyle = g; ctx.fillRect(0, 0, W, 230);
+    g = ctx.createLinearGradient(0, H, 0, H - 230); g.addColorStop(0, sand + "0.85)"); g.addColorStop(1, sand + "0)"); ctx.fillStyle = g; ctx.fillRect(0, H - 230, W, 230);
+    g = ctx.createLinearGradient(0, 0, 230, 0); g.addColorStop(0, sand + "0.85)"); g.addColorStop(1, sand + "0)"); ctx.fillStyle = g; ctx.fillRect(0, 0, 230, H);
+    g = ctx.createLinearGradient(W, 0, W - 230, 0); g.addColorStop(0, sand + "0.85)"); g.addColorStop(1, sand + "0)"); ctx.fillStyle = g; ctx.fillRect(W - 230, 0, 230, H);
+    // wavy caustic light
+    ctx.strokeStyle = "rgba(150,235,255,0.06)"; ctx.lineWidth = 9;
+    for (let y = 120; y < H; y += 250) { ctx.beginPath(); for (let x = 0; x <= W; x += 60) { const yy = y + Math.sin(x * 0.01 + t + y) * 22; x ? ctx.lineTo(x, yy) : ctx.moveTo(x, yy); } ctx.stroke(); }
+  } else if (D === "space") {
+    for (const it of decor.items) if (it.k < 0.14) {           // planets
+      const pc = ["#5b8def", "#e0794f", "#7ee0a0", "#c778e0"][(it.p * 10 | 0) % 4];
+      ctx.fillStyle = pc; ctx.beginPath(); ctx.arc(it.x, it.y, 22 * it.s, 0, 7); ctx.fill();
+      ctx.fillStyle = "rgba(255,255,255,0.15)"; ctx.beginPath(); ctx.arc(it.x - 7 * it.s, it.y - 7 * it.s, 9 * it.s, 0, 7); ctx.fill();
+    }
+  }
+  // scattered ground items
+  for (const it of decor.items) {
+    const x = it.x, y = it.y, s = it.s;
+    if (D === "water") {
+      if (it.k < 0.5) { ctx.strokeStyle = "#2e8b57"; ctx.lineWidth = 4 * s; ctx.beginPath(); ctx.moveTo(x, y); for (let j = 1; j <= 4; j++) ctx.lineTo(x + Math.sin(t * 2 + it.p + j) * 8 * s, y - j * 14 * s); ctx.stroke(); }
+      else if (it.k < 0.8) { ctx.fillStyle = "#ff8a8a"; for (const a of [-0.5, 0, 0.5]) { ctx.save(); ctx.translate(x, y); ctx.rotate(a); ctx.fillRect(-3 * s, -26 * s, 6 * s, 26 * s); ctx.restore(); } }
+      else { ctx.fillStyle = "#566"; ctx.beginPath(); ctx.ellipse(x, y, 14 * s, 10 * s, 0, 0, 7); ctx.fill(); }
+    } else if (D === "lava") {
+      if (it.k < 0.5) { ctx.strokeStyle = "rgba(255,140,30," + (0.35 + 0.15 * Math.sin(t * 4 + it.p)) + ")"; ctx.lineWidth = 3 * s; ctx.beginPath(); let px = x, py = y; ctx.moveTo(px, py); for (let j = 0; j < 3; j++) { px += Math.cos(it.p + j * 0.8) * 22 * s; py += Math.sin(it.p + j * 0.8) * 22 * s; ctx.lineTo(px, py); } ctx.stroke(); }
+      else if (it.k < 0.75) { ctx.fillStyle = "rgba(255,90,20," + (0.4 + 0.12 * Math.sin(t * 3 + it.p)) + ")"; ctx.beginPath(); ctx.ellipse(x, y, 20 * s, 14 * s, 0, 0, 7); ctx.fill(); ctx.fillStyle = "rgba(255,220,120,0.5)"; ctx.beginPath(); ctx.ellipse(x, y, 9 * s, 6 * s, 0, 0, 7); ctx.fill(); }
+      else { ctx.fillStyle = "#2a1414"; ctx.beginPath(); ctx.ellipse(x, y, 15 * s, 11 * s, 0, 0, 7); ctx.fill(); }
+    } else if (D === "forest") {
+      if (it.k < 0.4) { ctx.fillStyle = "#5b3a1e"; ctx.fillRect(x - 4 * s, y - 6 * s, 8 * s, 22 * s); ctx.fillStyle = "#2f6b32"; for (const d of [[0, -24, 18], [-10, -16, 12], [10, -16, 12]]) { ctx.beginPath(); ctx.arc(x + d[0] * s, y + d[1] * s, d[2] * s, 0, 7); ctx.fill(); } }
+      else if (it.k < 0.7) { ctx.fillStyle = "#357a3a"; for (const d of [[-8, 0], [8, 0], [0, -6]]) { ctx.beginPath(); ctx.arc(x + d[0] * s, y + d[1] * s, 10 * s, 0, 7); ctx.fill(); } }
+      else { ctx.strokeStyle = "#3e8c40"; ctx.lineWidth = 2; for (let j = -2; j <= 2; j++) { ctx.beginPath(); ctx.moveTo(x + j * 3, y); ctx.lineTo(x + j * 3 + Math.sin(t + it.p) * 3, y - 12 * s); ctx.stroke(); } }
+    } else if (D === "desert") {
+      if (it.k < 0.4) { ctx.fillStyle = "#3f7d3a"; ctx.fillRect(x - 4 * s, y - 24 * s, 8 * s, 30 * s); ctx.fillRect(x - 12 * s, y - 14 * s, 8 * s, 6 * s); ctx.fillRect(x + 4 * s, y - 18 * s, 8 * s, 6 * s); }
+      else { ctx.fillStyle = "#7a5a3a"; ctx.beginPath(); ctx.ellipse(x, y, 14 * s, 10 * s, 0, 0, 7); ctx.fill(); }
+    } else if (D === "ice") {
+      if (it.k < 0.4) { ctx.fillStyle = "rgba(200,240,255,0.7)"; ctx.beginPath(); ctx.moveTo(x, y - 18 * s); ctx.lineTo(x - 8 * s, y + 6 * s); ctx.lineTo(x + 8 * s, y + 6 * s); ctx.closePath(); ctx.fill(); }
+      else if (it.k < 0.7) { ctx.fillStyle = "rgba(235,245,255,0.5)"; ctx.beginPath(); ctx.ellipse(x, y, 18 * s, 8 * s, 0, 0, 7); ctx.fill(); }
+      else { ctx.fillStyle = "#6b8290"; ctx.beginPath(); ctx.ellipse(x, y, 13 * s, 10 * s, 0, 0, 7); ctx.fill(); }
+    } else if (D === "candy") {
+      if (it.k < 0.45) { ctx.fillStyle = "#fff"; ctx.fillRect(x - 2, y, 4, 22 * s); const cc = ["#ff6ec7", "#7ce0ff", "#ffe36e"][(it.p * 10 | 0) % 3]; ctx.fillStyle = cc; ctx.beginPath(); ctx.arc(x, y - 4 * s, 12 * s, 0, 7); ctx.fill(); ctx.strokeStyle = "#fff"; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y - 4 * s, 7 * s, 0, 3.2); ctx.stroke(); }
+      else { const cc = ["#ff8ad1", "#8affc0", "#8ac0ff"][(it.p * 10 | 0) % 3]; ctx.fillStyle = cc; ctx.beginPath(); ctx.arc(x, y, 11 * s, Math.PI, 0); ctx.fill(); ctx.fillRect(x - 11 * s, y, 22 * s, 4); }
+    } else if (D === "space") {
+      if (it.k >= 0.14 && it.k < 0.34) { ctx.fillStyle = "#556"; ctx.beginPath(); ctx.ellipse(x, y, 10 * s, 7 * s, 0, 0, 7); ctx.fill(); }
+    } else {   // dark
+      if (it.k < 0.4) { ctx.fillStyle = "rgba(120,200,255,0.45)"; ctx.beginPath(); ctx.moveTo(x, y - 16 * s); ctx.lineTo(x - 7 * s, y + 6 * s); ctx.lineTo(x + 7 * s, y + 6 * s); ctx.closePath(); ctx.fill(); }
+      else if (it.k < 0.7) { ctx.fillStyle = shade(curMap.floor, 22); ctx.beginPath(); ctx.ellipse(x, y, 13 * s, 9 * s, 0, 0, 7); ctx.fill(); }
+    }
+  }
+}
+
+// ---------- floating particles (drawn over everything, see-through) ----------
+function drawDecorFloats() {
+  const D = curMap.decor, W = WORLD.w, H = WORLD.h, t = gameTime;
+  for (const f of decor.floats) {
+    if (D === "water") { const y = ((f.y - t * 40 * f.s) % H + H) % H; ctx.strokeStyle = "rgba(180,230,255,0.5)"; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(f.x + Math.sin(t * 2 + f.p) * 6, y, 2.5 * f.s, 0, 7); ctx.stroke(); }
+    else if (D === "lava") { const y = ((f.y - t * 32 * f.s) % H + H) % H; ctx.fillStyle = "rgba(255," + (120 + 100 * Math.sin(t * 5 + f.p) | 0) + ",40,0.7)"; ctx.beginPath(); ctx.arc(f.x + Math.sin(t * 3 + f.p) * 4, y, 1.8 * f.s, 0, 7); ctx.fill(); }
+    else if (D === "ice") { const y = ((f.y + t * 30 * f.s) % H + H) % H; ctx.fillStyle = "rgba(255,255,255,0.7)"; ctx.beginPath(); ctx.arc(f.x + Math.sin(t * 1.5 + f.p) * 22, y, 2 * f.s, 0, 7); ctx.fill(); }
+    else if (D === "candy") { const y = ((f.y + t * 26 * f.s) % H + H) % H; ctx.fillStyle = "rgba(255,150,220,0.6)"; ctx.beginPath(); ctx.arc(f.x + Math.sin(t * 1.5 + f.p) * 22, y, 2.2 * f.s, 0, 7); ctx.fill(); }
+    else if (D === "space") { const tw = 0.25 + 0.55 * Math.abs(Math.sin(t * 2 + f.p)); ctx.fillStyle = "rgba(255,255,255," + tw + ")"; ctx.fillRect(f.x, f.y, 2 * f.s, 2 * f.s); }
+    else if (D === "desert") { const x = ((f.x + t * 45 * f.s) % W + W) % W; ctx.fillStyle = "rgba(210,180,120,0.14)"; ctx.beginPath(); ctx.arc(x, f.y, 2.4 * f.s, 0, 7); ctx.fill(); }
+    else if (D === "forest") { const y = ((f.y + t * 24 * f.s) % H + H) % H; ctx.fillStyle = "rgba(" + (120 + 80 * f.k | 0) + ",180,80,0.6)"; ctx.beginPath(); ctx.arc(f.x + Math.sin(t * 1.5 + f.p) * 24, y, 2 * f.s, 0, 7); ctx.fill(); }
+    else { const y = ((f.y - t * 10 * f.s) % H + H) % H; ctx.fillStyle = "rgba(255,255,255,0.08)"; ctx.beginPath(); ctx.arc(f.x, y, 1.6 * f.s, 0, 7); ctx.fill(); }
+  }
 }
 
 // ---------- draw everything each frame ----------
@@ -1301,6 +1452,9 @@ function draw() {
   ctx.lineWidth = 1;
   for (let x = 0; x <= WORLD.w; x += 80) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, WORLD.h); ctx.stroke(); }
   for (let y = 0; y <= WORLD.h; y += 80) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(WORLD.w, y); ctx.stroke(); }
+
+  drawDecorGround();   // themed scenery under the blocks
+
   ctx.strokeStyle = curMap._border; ctx.lineWidth = 6;
   ctx.strokeRect(0, 0, WORLD.w, WORLD.h);
 
@@ -1327,15 +1481,18 @@ function draw() {
 
   // bullets
   for (const bu of bullets) {
-    ctx.strokeStyle = bu.color; ctx.lineWidth = 2; ctx.globalAlpha = 0.5;
+    ctx.strokeStyle = bu.color; ctx.lineWidth = bu.big ? 4 : 2; ctx.globalAlpha = 0.5;
     ctx.beginPath(); ctx.moveTo(bu.x - bu.vx * 0.02, bu.y - bu.vy * 0.02); ctx.lineTo(bu.x, bu.y); ctx.stroke();
     ctx.globalAlpha = 1;
     ctx.fillStyle = bu.color;
-    ctx.beginPath(); ctx.arc(bu.x, bu.y, 3.5, 0, 7); ctx.fill();
+    ctx.beginPath(); ctx.arc(bu.x, bu.y, bu.big ? 6 : 3.5, 0, 7); ctx.fill();
+    if (bu.big) { ctx.globalAlpha = 0.3; ctx.beginPath(); ctx.arc(bu.x, bu.y, 11, 0, 7); ctx.fill(); ctx.globalAlpha = 1; }
   }
 
   // all the mechs
   for (const f of fighters()) if (f.alive) drawMech(f);
+
+  drawDecorFloats();   // bubbles / snow / embers / stars over the top
 
   // sparkles
   for (const p of particles) {
@@ -1388,10 +1545,10 @@ function draw() {
   ctx.textAlign = "right";
   ctx.font = "bold 20px Arial";
   ctx.fillStyle = "#fff";
-  if (matchMode === "teams") {
+  if (matchMode === "teams" || matchMode === "boss") {
     const myAlive = fighters().filter(f => f.alive && f.team === player.team).length;
     const foeAlive = fighters().filter(f => f.alive && f.team !== player.team).length;
-    ctx.fillText("🟦 " + myAlive + "  vs  🟥 " + foeAlive, canvas.width - 20, 84);
+    ctx.fillText("🟦 " + myAlive + "  vs  " + (matchMode === "boss" ? "👹 " : "🟥 ") + foeAlive, canvas.width - 20, 84);
   } else {
     const alive = fighters().filter(f => f.alive).length;
     ctx.fillText("🤖 " + alive + " LEFT", canvas.width - 20, 84);
