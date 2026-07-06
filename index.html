@@ -20,6 +20,9 @@
   .statsRow { display: flex; gap: 26px; font-size: 22px; font-weight: bold; }
   .hint { color: #8b93b0; font-size: 15px; }
   #loadoutLine { color: #aab2d0; font-size: 17px; }
+  #rankLine { font-size: 18px; color: #aab2d0; }
+  .rainbowText { background: linear-gradient(90deg,#ff5b5b,#f5c542,#2ecc71,#22d3ee,#a06bff,#ff5ce0);
+                 -webkit-background-clip: text; background-clip: text; color: transparent; font-weight: bold; }
 
   .btn { font-size: 20px; font-weight: bold; color: #fff; background: #232a45; border: 2px solid #3a4266;
          border-radius: 12px; padding: 12px 34px; cursor: pointer; min-width: 300px; }
@@ -118,6 +121,7 @@
 <div id="menu" class="screen">
   <h1>MECH <span>ROYALE</span></h1>
   <div class="statsRow"><span id="menuCoins">🪙 0</span><span id="menuWins">🏆 Wins: 0</span></div>
+  <div id="rankLine"></div>
   <div id="loadoutLine">🤖 Rust Bucket • 🔫 Common Pistol</div>
   <button class="btn big" id="btnPlay">▶ PLAY</button>
   <button class="btn" id="btnMechs">🤖 MECH STORE</button>
@@ -214,6 +218,34 @@ const RARITIES = {
 const RARITY_ORDER = ["common", "rare", "mythic", "legendary"];
 
 // =====================================================================
+//  RANKS — the more matches you WIN, the higher your rank climbs.
+//  Higher rank also makes the enemies tougher!
+// =====================================================================
+const RANKS = [
+  { name: "Leather",     wins: 0,   color: "#8a5a2b", emoji: "🟫" },
+  { name: "Wood",        wins: 3,   color: "#b5844c", emoji: "🪵" },
+  { name: "Stone",       wins: 8,   color: "#9aa0a6", emoji: "🪨" },
+  { name: "Copper",      wins: 15,  color: "#c9743b", emoji: "🟠" },
+  { name: "Gold",        wins: 25,  color: "#f5c542", emoji: "🥇" },
+  { name: "Emerald",     wins: 40,  color: "#2ecc71", emoji: "💚" },
+  { name: "Diamond",     wins: 60,  color: "#5bd6f5", emoji: "💎" },
+  { name: "Red Diamond", wins: 85,  color: "#ff4d6d", emoji: "🔺" },
+  { name: "Uranium",     wins: 120, color: "#8cff2a", emoji: "☢️" },
+  { name: "Rainbow",     wins: 160, color: "#ff66cc", emoji: "🌈", rainbow: true },
+  { name: "Secret",      wins: 210, color: "#a06bff", emoji: "🔮" },
+  { name: "Black Hole",  wins: 280, color: "#6d4bce", emoji: "🕳️" },
+  { name: "Universe",    wins: 370, color: "#7a5cff", emoji: "🌌" },
+  { name: "Multiverse",  wins: 500, color: "#ff5ce0", emoji: "🌠", rainbow: true },
+  { name: "Everything",  wins: 700, color: "#ffd700", emoji: "✨", rainbow: true },
+];
+function rankIndexFor(wins) { let i = 0; for (let k = 0; k < RANKS.length; k++) if (wins >= RANKS[k].wins) i = k; return i; }
+function rankOf(wins) { return RANKS[rankIndexFor(wins)]; }
+function rankHTML(rk) {
+  return rk.rainbow ? '<b class="rainbowText">' + rk.emoji + " " + rk.name + '</b>'
+                    : '<b style="color:' + rk.color + '">' + rk.emoji + " " + rk.name + '</b>';
+}
+
+// =====================================================================
 //  THE 30 MECHS — hp = health, speed = how fast it walks.
 //  The store shows them in this order: common → rare → mythic → legendary.
 //  You start with the Rust Bucket (it's free... and bad).
@@ -283,6 +315,27 @@ const GUN_TYPES = [
   { id: "minigun", name: "Minigun",       dmg: 5,  rate: 14,  speed: 12, spread: 0.18,  pellets: 1 },
   { id: "cannon",  name: "Hand Cannon",   dmg: 30, rate: 1.2, speed: 14, spread: 0.03,  pellets: 1 },
   { id: "laser",   name: "Laser Rifle",   dmg: 8,  rate: 8,   speed: 16, spread: 0.04,  pellets: 1 },
+  // ---- 20 more guns ----
+  { id: "mgun",       name: "Machine Gun",     dmg: 8,   rate: 9,   speed: 13, spread: 0.10,  pellets: 1 },
+  { id: "burst",      name: "Burst Rifle",     dmg: 14,  rate: 4,   speed: 14, spread: 0.06,  pellets: 1 },
+  { id: "autoshot",   name: "Auto Shotgun",    dmg: 6,   rate: 3,   speed: 10, spread: 0.22,  pellets: 5 },
+  { id: "revolver",   name: "Revolver",        dmg: 35,  rate: 1.6, speed: 15, spread: 0.02,  pellets: 1 },
+  { id: "rocket",     name: "Rocket Launcher", dmg: 60,  rate: 0.7, speed: 12, spread: 0.02,  pellets: 1 },
+  { id: "flame",      name: "Flamethrower",    dmg: 3,   rate: 20,  speed: 8,  spread: 0.26,  pellets: 1 },
+  { id: "rail",       name: "Railgun",         dmg: 70,  rate: 0.6, speed: 24, spread: 0.003, pellets: 1 },
+  { id: "plasma",     name: "Plasma Cannon",   dmg: 18,  rate: 3,   speed: 15, spread: 0.05,  pellets: 1 },
+  { id: "tesla",      name: "Tesla Gun",       dmg: 10,  rate: 6,   speed: 18, spread: 0.04,  pellets: 1 },
+  { id: "grenade",    name: "Grenade Launcher",dmg: 45,  rate: 1,   speed: 10, spread: 0.05,  pellets: 1 },
+  { id: "dualpistol", name: "Dual Pistols",    dmg: 10,  rate: 6,   speed: 12, spread: 0.09,  pellets: 1 },
+  { id: "heavysniper",name: "Heavy Sniper",    dmg: 80,  rate: 0.5, speed: 22, spread: 0.002, pellets: 1 },
+  { id: "vector",     name: "Vector SMG",      dmg: 5,   rate: 13,  speed: 13, spread: 0.14,  pellets: 1 },
+  { id: "pulse",      name: "Pulse Rifle",     dmg: 12,  rate: 7,   speed: 16, spread: 0.05,  pellets: 1 },
+  { id: "scatter",    name: "Scattergun",      dmg: 5,   rate: 2,   speed: 10, spread: 0.30,  pellets: 8 },
+  { id: "lasermini",  name: "Laser Minigun",   dmg: 6,   rate: 16,  speed: 17, spread: 0.12,  pellets: 1 },
+  { id: "bfg",        name: "BFG",             dmg: 120, rate: 0.4, speed: 14, spread: 0.01,  pellets: 1 },
+  { id: "nailgun",    name: "Nail Gun",        dmg: 7,   rate: 10,  speed: 14, spread: 0.08,  pellets: 1 },
+  { id: "ion",        name: "Ion Blaster",     dmg: 22,  rate: 2.5, speed: 16, spread: 0.04,  pellets: 1 },
+  { id: "deathray",   name: "Death Ray",       dmg: 15,  rate: 10,  speed: 20, spread: 0.02,  pellets: 1 },
 ];
 const MAX_LEVEL = 5;
 
@@ -473,6 +526,12 @@ function refreshLabels() {
   const g = equippedGun();
   $("loadoutLine").textContent = "🤖 " + MECHS[save.mechEquipped].name + " • 🔫 " + gunLabel(g) +
                                  (g.level > 1 ? " Lv" + g.level : "");
+  // rank line: current rank + how many wins to the next one
+  const ri = rankIndexFor(save.wins), rk = RANKS[ri], next = RANKS[ri + 1];
+  $("rankLine").innerHTML = "Rank: " + rankHTML(rk) +
+    (next ? '  <span style="color:#8b93b0">→ next ' + next.emoji + " " + next.name +
+            " in " + (next.wins - save.wins) + " wins</span>"
+          : '  <span style="color:#f5c542">👑 MAX RANK!</span>');
 }
 function goMenu() { state = "menu"; resetRestartBtn(); refreshLabels(); showScreen("menu"); }
 
@@ -788,22 +847,25 @@ function makeFighter(x, y, mech, gun, isPlayer, name, team) {
 }
 
 // bots mostly drive cheap mechs, but sometimes a scary one shows up
-function botMechIdx() {
+// higher "boost" (from your rank) = enemies roll better mechs/guns
+function botMechIdx(boost) {
+  boost = boost || 0;
   const r = Math.random() * 100;
-  const rar = r < 2 ? "legendary" : r < 12 ? "mythic" : r < 45 ? "rare" : "common";
+  const rar = r < 2 + boost * 2.5 ? "legendary" : r < 12 + boost * 4 ? "mythic" : r < 45 + boost * 3 ? "rare" : "common";
   const pool = [];
   MECHS.forEach((m, i) => { if (m.rarity === rar) pool.push(i); });
   return pool[Math.floor(Math.random() * pool.length)];
 }
-function botGun() {
+function botGun(boost) {
+  boost = boost || 0;
   const r = Math.random() * 100;
-  const rar = r < 2 ? "legendary" : r < 10 ? "mythic" : r < 40 ? "rare" : "common";
+  const rar = r < 2 + boost * 2.5 ? "legendary" : r < 10 + boost * 4 ? "mythic" : r < 40 + boost * 3 ? "rare" : "common";
   return { type: GUN_TYPES[Math.floor(Math.random() * GUN_TYPES.length)].id, rarity: rar, level: 1 };
 }
 
 // ---------- start a new match ----------
 // mode = "ffa" (everyone solo) or "teams"; size = players per team (teams) or total players (ffa)
-let matchMode = "ffa", matchTeamSize = 0, lastCfg = { mode: "ffa", size: 6 };
+let matchMode = "ffa", matchTeamSize = 0, lastCfg = { mode: "ffa", size: 6 }, difficulty = 0;
 function botNameFor(i) {
   const base = BOT_NAMES[i % BOT_NAMES.length];
   return i < BOT_NAMES.length ? base : base + (Math.floor(i / BOT_NAMES.length) + 1);
@@ -817,6 +879,7 @@ function startMatch(cfg) {
   lastCfg = { mode: matchMode, size };
   const total = matchMode === "teams" ? size * 2 : size;
   matchCoinMult = clamp(total / 6, 1, 10);   // the more mechs fighting, the more coins you earn
+  difficulty = rankIndexFor(save.wins);      // higher rank = tougher enemies
 
   // pick the map (a specific one, or random if you chose 🎲)
   curMap = MAPS[(save.mapIdx != null && save.mapIdx >= 0) ? save.mapIdx : Math.floor(Math.random() * MAPS.length)] || MAPS[0];
@@ -840,19 +903,27 @@ function startMatch(cfg) {
   const pSpot = findSpot(pr, null, 0, matchMode === "teams" ? leftReg : null);
   player = makeFighter(pSpot.x, pSpot.y, myMech, equippedGun(), true, "YOU", matchMode === "teams" ? "A" : "you");
 
-  // the other mechs
+  // the other mechs. Enemies get tougher the higher your rank is.
   bots = [];
   let idx = 0;
-  const addBot = (team, region) => {
-    const m = MECHS[botMechIdx()];
+  const addBot = (team, region, isEnemy) => {
+    const boost = isEnemy ? difficulty : 0;
+    const m = MECHS[botMechIdx(boost)];
     const s = findSpot(15 + Math.round(m.hp / 50), null, 0, region);
-    bots.push(makeFighter(s.x, s.y, m, botGun(), false, botNameFor(idx++), team));
+    const b = makeFighter(s.x, s.y, m, botGun(boost), false, botNameFor(idx++), team);
+    if (isEnemy && difficulty > 0) {
+      b.maxHp = Math.round(b.maxHp * (1 + difficulty * 0.07));   // more health
+      b.hp = b.maxHp;
+      b.speed *= 1 + difficulty * 0.02;                          // a bit faster
+      b.aimErr *= clamp(1 - difficulty * 0.045, 0.35, 1);        // much better aim
+    }
+    bots.push(b);
   };
   if (matchMode === "teams") {
-    for (let i = 0; i < size - 1; i++) addBot("A", leftReg);    // your teammates
-    for (let i = 0; i < size; i++)     addBot("B", rightReg);   // the enemy team
+    for (let i = 0; i < size - 1; i++) addBot("A", leftReg, false);   // your teammates (normal)
+    for (let i = 0; i < size; i++)     addBot("B", rightReg, true);   // the enemy team (buffed)
   } else {
-    for (let i = 0; i < size - 1; i++) addBot("ffa" + i, null); // everyone for themselves
+    for (let i = 0; i < size - 1; i++) addBot("ffa" + i, null, true); // everyone for themselves (buffed)
   }
 
   // health packs — more on bigger maps
@@ -867,6 +938,7 @@ function startMatch(cfg) {
   cam.x = player.x - canvas.width / 2; cam.y = player.y - canvas.height / 2;
   banner("🗺️ " + curMap.name + (matchMode === "teams" ? " — " + size + "v" + size + " — wipe out the 🟥 RED team!"
                                                         : " — " + size + "-player FREE FOR ALL — GO!"), "#22d3ee");
+  if (difficulty > 0) banner("☠ Enemies scaled to " + rankOf(save.wins).name + " rank!", "#ff8a8a");
   showScreen(null);
   state = "game";
 }
@@ -978,11 +1050,16 @@ function endMatch(won, leftEarly) {
       : won ? "🏆 VICTORY!"
       : (matchMode === "teams" ? "💥 DEFEAT — your team lost" : "💥 You placed #" + place);
     $("endTitle").style.color = won ? "#f5c542" : "#fff";
+    // did this win push you up to a new rank?
+    const rankedUp = won && rankIndexFor(save.wins + 1) > rankIndexFor(save.wins);
+    const newRank = rankOf(save.wins + (won ? 1 : 0));
     $("endStats").innerHTML =
+      (rankedUp ? "⬆ <b>RANK UP!</b> You are now " + rankHTML(newRank) + "!<br>" : "") +
       (matchCoinMult > 1.05 ? "🔥 Big-battle bonus: <b>x" + matchCoinMult.toFixed(1) + "</b> coins!<br>" : "") +
       "🎯 Kills: " + matchKills + " → +" + (matchKills * killCoins()) + " 🪙<br>" +
       "🎮 Played: +" + playCoins() + " 🪙<br>" +
       (won ? "🏆 Win bonus: +" + winCoins() + " 🪙<br>" : "") +
+      "🏅 Rank: " + rankHTML(newRank) + " (🏆 " + (save.wins + (won ? 1 : 0)) + " wins)<br>" +
       "<b style='color:#f5c542'>Total earned: +" + (matchEarned() + bonus) + " 🪙</b>";
     showScreen("endScreen");
 
