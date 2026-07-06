@@ -878,8 +878,9 @@ function startMatch(cfg) {
   matchTeamSize = size;
   lastCfg = { mode: matchMode, size };
   const total = matchMode === "teams" ? size * 2 : size;
-  matchCoinMult = clamp(total / 6, 1, 10);   // the more mechs fighting, the more coins you earn
-  difficulty = rankIndexFor(save.wins);      // higher rank = tougher enemies
+  difficulty = rankIndexFor(save.wins);      // higher rank = tougher enemies AND more coins
+  // coins scale with BOTH how many mechs are fighting AND your rank
+  matchCoinMult = clamp(total / 6, 1, 10) * (1 + difficulty * 0.2);
 
   // pick the map (a specific one, or random if you chose 🎲)
   curMap = MAPS[(save.mapIdx != null && save.mapIdx >= 0) ? save.mapIdx : Math.floor(Math.random() * MAPS.length)] || MAPS[0];
@@ -1055,7 +1056,7 @@ function endMatch(won, leftEarly) {
     const newRank = rankOf(save.wins + (won ? 1 : 0));
     $("endStats").innerHTML =
       (rankedUp ? "⬆ <b>RANK UP!</b> You are now " + rankHTML(newRank) + "!<br>" : "") +
-      (matchCoinMult > 1.05 ? "🔥 Big-battle bonus: <b>x" + matchCoinMult.toFixed(1) + "</b> coins!<br>" : "") +
+      (matchCoinMult > 1.05 ? "🔥 Coin bonus: <b>x" + matchCoinMult.toFixed(1) + "</b> (rank + battle size)!<br>" : "") +
       "🎯 Kills: " + matchKills + " → +" + (matchKills * killCoins()) + " 🪙<br>" +
       "🎮 Played: +" + playCoins() + " 🪙<br>" +
       (won ? "🏆 Win bonus: +" + winCoins() + " 🪙<br>" : "") +
