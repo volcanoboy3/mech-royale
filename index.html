@@ -1,0 +1,1103 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mech Royale</title>
+<style>
+  /* ============ LOOK OF THE WHOLE PAGE ============ */
+  * { box-sizing: border-box; user-select: none; }
+  body { margin: 0; background: #0f1220; color: #fff; font-family: Arial, Helvetica, sans-serif; overflow: hidden; }
+  canvas { position: fixed; inset: 0; display: block; cursor: crosshair; }
+
+  /* ============ MENU SCREENS (the pages with buttons) ============ */
+  .screen { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center;
+            justify-content: center; gap: 14px; background: rgba(10, 12, 25, 0.94); z-index: 10; }
+  .hidden { display: none !important; }
+  h1 { font-size: 54px; margin: 0 0 6px; letter-spacing: 2px; color: #22d3ee; text-shadow: 0 0 24px #22d3ee66; }
+  h1 span { color: #f5a623; text-shadow: 0 0 24px #f5a62366; }
+  h2 { font-size: 34px; margin: 0; }
+  .statsRow { display: flex; gap: 26px; font-size: 22px; font-weight: bold; }
+  .hint { color: #8b93b0; font-size: 15px; }
+  #loadoutLine { color: #aab2d0; font-size: 17px; }
+
+  .btn { font-size: 20px; font-weight: bold; color: #fff; background: #232a45; border: 2px solid #3a4266;
+         border-radius: 12px; padding: 12px 34px; cursor: pointer; min-width: 300px; }
+  .btn:hover:not(:disabled) { background: #2e3760; border-color: #22d3ee; transform: scale(1.04); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn.big { font-size: 28px; padding: 16px 50px; background: #16a34a; border-color: #22c55e; }
+  .btn.big:hover { background: #1db954; border-color: #4ade80; }
+
+  /* ============ STORE CARDS ============ */
+  .cardList { display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; max-width: 1020px;
+              max-height: 58vh; overflow-y: auto; padding: 10px; }
+  .card { background: #1a1f36; border: 3px solid #555; border-radius: 14px; padding: 10px 14px;
+          width: 300px; text-align: center; }
+  .card.equipped { box-shadow: 0 0 18px #22c55e88; }
+  .cardRarity { font-size: 12px; font-weight: bold; letter-spacing: 2px; }
+  .cardName { font-size: 21px; font-weight: bold; margin: 2px 0; }
+  .cardStats { color: #aab2d0; font-size: 14px; margin-bottom: 8px; }
+  .card .row { display: flex; gap: 8px; justify-content: center; }
+  .card .row .btn { min-width: 0; font-size: 14px; padding: 8px 12px; }
+  .equippedTag { color: #22c55e; font-weight: bold; font-size: 14px; }
+
+  /* ============ SECRET CODES ============ */
+  .codeEntry { display: flex; gap: 8px; }
+  #codeInput { font-size: 20px; font-weight: bold; padding: 10px 16px; border-radius: 12px;
+               border: 2px solid #3a4266; background: #10142a; color: #fff; width: 240px;
+               text-transform: uppercase; letter-spacing: 2px; }
+  #codeInput:focus { outline: none; border-color: #22d3ee; }
+  #codeMsg { font-size: 17px; font-weight: bold; min-height: 22px; }
+  .codeList { display: flex; flex-direction: column; gap: 8px; width: 92vw; max-width: 580px;
+              max-height: 44vh; overflow-y: auto; padding: 6px; }
+  .codeRow { display: flex; align-items: center; gap: 12px; background: #1a1f36;
+             border: 2px solid #3a4266; border-radius: 12px; padding: 8px 14px; }
+  .codeRow.used { opacity: 0.45; }
+  .codeText { font-family: 'Courier New', monospace; font-size: 19px; font-weight: bold;
+              color: #22d3ee; letter-spacing: 2px; min-width: 155px; text-align: left; }
+  .codeReward { flex: 1; color: #f5c542; font-size: 15px; text-align: left; }
+  .codeStatus { min-width: 82px; text-align: right; font-size: 13px; font-weight: bold; color: #6b7290; }
+  .codeRow.used .codeStatus { color: #22c55e; }
+
+  /* hint on the secret codes screen (the codes themselves are never shown) */
+  .codeHint { color: #8b93b0; font-size: 17px; text-align: center; line-height: 1.7;
+              padding: 24px; border: 2px dashed #3a4266; border-radius: 12px; }
+
+  /* 🔊 mute button in the corner during a match */
+  #btnMute { position: fixed; top: 12px; right: 14px; z-index: 6; font-size: 18px;
+             background: rgba(35,42,69,0.88); border: 2px solid #3a4266; border-radius: 10px;
+             padding: 6px 12px; cursor: pointer; }
+  #btnMute:hover { border-color: #22d3ee; }
+
+  /* the RESTART GAME button — red so you know it wipes your stuff */
+  #btnRestart { border-color: #7f1d1d; }
+  #btnRestart:hover:not(:disabled) { background: #3a1a24; border-color: #ef4444; }
+  #btnRestart.danger { background: #b91c1c; border-color: #ef4444; }
+  #btnRestart.danger:hover { background: #dc2626; }
+</style>
+</head>
+<body>
+
+<!-- ================= MAIN MENU ================= -->
+<div id="menu" class="screen">
+  <h1>MECH <span>ROYALE</span></h1>
+  <div class="statsRow"><span id="menuCoins">🪙 0</span><span id="menuWins">🏆 Wins: 0</span></div>
+  <div id="loadoutLine">🤖 Rust Bucket • 🔫 Common Pistol</div>
+  <button class="btn big" id="btnPlay">▶ PLAY</button>
+  <button class="btn" id="btnMechs">🤖 MECH STORE</button>
+  <button class="btn" id="btnGuns">🔫 GUN STORE</button>
+  <button class="btn" id="btnCodes">🔑 SECRET CODES</button>
+  <button class="btn" id="btnRestart">🔄 RESTART GAME</button>
+  <p class="hint">WASD to move • mouse to aim • click to shoot • earn coins from kills and wins!</p>
+</div>
+
+<!-- ================= MECH STORE ================= -->
+<div id="mechStore" class="screen hidden">
+  <h2>🤖 MECH STORE</h2>
+  <div class="statsRow"><span id="mechCoins">🪙 0</span></div>
+  <div id="mechList" class="cardList"></div>
+  <button class="btn" id="btnMechBack">⬅ BACK</button>
+</div>
+
+<!-- ================= GUN STORE ================= -->
+<div id="gunStore" class="screen hidden">
+  <h2>🔫 GUN STORE</h2>
+  <div class="statsRow"><span id="gunCoins">🪙 0</span></div>
+  <div id="gunList" class="cardList"></div>
+  <button class="btn" id="btnGunBack">⬅ BACK</button>
+</div>
+
+<!-- ================= SECRET CODES ================= -->
+<div id="codesScreen" class="screen hidden">
+  <h2>🔑 SECRET CODES</h2>
+  <div class="statsRow"><span id="codesCoins">🪙 0</span></div>
+  <div class="codeEntry">
+    <input id="codeInput" type="text" placeholder="type a code..." autocomplete="off" spellcheck="false" maxlength="16">
+    <button class="btn" id="btnRedeem">✅ ENTER</button>
+  </div>
+  <div id="codeMsg">&nbsp;</div>
+  <div id="codeList" class="codeList"></div>
+  <button class="btn" id="btnCodesBack">⬅ BACK</button>
+</div>
+
+<!-- ================= END OF MATCH SCREEN ================= -->
+<div id="endScreen" class="screen hidden" style="background: rgba(8,10,20,0.82);">
+  <h2 id="endTitle">🏆 VICTORY!</h2>
+  <div id="endStats" style="font-size:20px; line-height:1.8; text-align:center;"></div>
+  <button class="btn big" id="btnAgain">▶ PLAY AGAIN</button>
+  <button class="btn" id="btnMenu">🏠 MENU</button>
+</div>
+
+<button id="btnMute">🔊</button>
+<canvas id="game"></canvas>
+
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+
+// =====================================================================
+//  RARITIES — common is bad, rare is okay, mythic is good,
+//  legendary is the BEST. "mult" makes guns stronger.
+// =====================================================================
+const RARITIES = {
+  common:    { name: "COMMON",    color: "#b0b7c3", mult: 1.0,  upCost: 20 },
+  rare:      { name: "RARE",      color: "#3b82f6", mult: 1.3,  upCost: 35 },
+  mythic:    { name: "MYTHIC",    color: "#a855f7", mult: 1.65, upCost: 55 },
+  legendary: { name: "LEGENDARY", color: "#f5a623", mult: 2.1,  upCost: 80 },
+};
+const RARITY_ORDER = ["common", "rare", "mythic", "legendary"];
+
+// =====================================================================
+//  THE 30 MECHS — hp = health, speed = how fast it walks.
+//  The store shows them in this order: common → rare → mythic → legendary.
+//  You start with the Rust Bucket (it's free... and bad).
+// =====================================================================
+const MECHS = [
+  // ---- COMMON (bad, but cheap) ----
+  { name: "Rust Bucket",   rarity: "common",    hp: 100, speed: 200, price: 0,    color: "#8a8f9c" },
+  { name: "Tin Can",       rarity: "common",    hp: 90,  speed: 215, price: 35,   color: "#9aa0ad" },
+  { name: "Boxy",          rarity: "common",    hp: 110, speed: 195, price: 45,   color: "#7d8494" },
+  { name: "Toaster",       rarity: "common",    hp: 120, speed: 185, price: 55,   color: "#95908a" },
+  { name: "Lawn Mower",    rarity: "common",    hp: 100, speed: 210, price: 65,   color: "#7f8a72" },
+  { name: "Clunker",       rarity: "common",    hp: 130, speed: 180, price: 75,   color: "#8f7a5e" },
+  { name: "Scrappy",       rarity: "common",    hp: 105, speed: 220, price: 85,   color: "#6f7686" },
+  { name: "Rover",         rarity: "common",    hp: 115, speed: 210, price: 95,   color: "#84796b" },
+  { name: "Big Boxy",      rarity: "common",    hp: 150, speed: 170, price: 105,  color: "#8c8c8c" },
+  { name: "Zippy",         rarity: "common",    hp: 85,  speed: 245, price: 120,  color: "#77808f" },
+  // ---- RARE (okay) ----
+  { name: "Blue Bolt",     rarity: "rare",      hp: 140, speed: 225, price: 150,  color: "#3b82f6" },
+  { name: "Guard Dog",     rarity: "rare",      hp: 180, speed: 195, price: 180,  color: "#5b8def" },
+  { name: "Wasp",          rarity: "rare",      hp: 120, speed: 255, price: 210,  color: "#38bdf8" },
+  { name: "Bulldozer",     rarity: "rare",      hp: 220, speed: 175, price: 240,  color: "#2ea8d5" },
+  { name: "Falcon",        rarity: "rare",      hp: 150, speed: 240, price: 270,  color: "#4f6ef7" },
+  { name: "Knight",        rarity: "rare",      hp: 200, speed: 200, price: 300,  color: "#36a2eb" },
+  { name: "Viper",         rarity: "rare",      hp: 160, speed: 235, price: 330,  color: "#2dd4bf" },
+  { name: "Rhino",         rarity: "rare",      hp: 250, speed: 170, price: 360,  color: "#4682e0" },
+  // ---- MYTHIC (good!) ----
+  { name: "Phantom",       rarity: "mythic",    hp: 200, speed: 260, price: 420,  color: "#a855f7" },
+  { name: "Thunder",       rarity: "mythic",    hp: 260, speed: 220, price: 480,  color: "#8b5cf6" },
+  { name: "Golem",         rarity: "mythic",    hp: 330, speed: 180, price: 540,  color: "#9333ea" },
+  { name: "Shadow Blade",  rarity: "mythic",    hp: 220, speed: 270, price: 600,  color: "#7c3aed" },
+  { name: "Storm Bringer", rarity: "mythic",    hp: 280, speed: 235, price: 660,  color: "#c026d3" },
+  { name: "Iron Titan",    rarity: "mythic",    hp: 360, speed: 175, price: 720,  color: "#b565f0" },
+  { name: "Night Hawk",    rarity: "mythic",    hp: 240, speed: 265, price: 780,  color: "#d946ef" },
+  // ---- LEGENDARY (the BEST) ----
+  { name: "Dragon Fire",   rarity: "legendary", hp: 320, speed: 260, price: 900,  color: "#f97316" },
+  { name: "Doom Walker",   rarity: "legendary", hp: 420, speed: 200, price: 1000, color: "#ef4444" },
+  { name: "Star Crusher",  rarity: "legendary", hp: 360, speed: 245, price: 1100, color: "#fbbf24" },
+  { name: "Omega Prime",   rarity: "legendary", hp: 400, speed: 240, price: 1250, color: "#f5a623" },
+  { name: "Mega Destroyer",rarity: "legendary", hp: 500, speed: 230, price: 1500, color: "#ffd700" },
+];
+
+// =====================================================================
+//  THE GUNS — you buy these in the gun store. Every gun comes in all
+//  4 rarities (a Legendary Minigun is WAY stronger than a Common one).
+//  dmg = damage per bullet, rate = shots per second,
+//  pellets = bullets per shot (shotgun fires 6 at once!)
+// =====================================================================
+const GUN_TYPES = [
+  { id: "pistol",  name: "Pistol",        dmg: 12, rate: 3,   speed: 11, spread: 0.05,  pellets: 1 },
+  { id: "smg",     name: "SMG",           dmg: 6,  rate: 10,  speed: 12, spread: 0.13,  pellets: 1 },
+  { id: "shotgun", name: "Shotgun",       dmg: 7,  rate: 1.4, speed: 10, spread: 0.25,  pellets: 6 },
+  { id: "rifle",   name: "Assault Rifle", dmg: 10, rate: 6,   speed: 13, spread: 0.07,  pellets: 1 },
+  { id: "sniper",  name: "Sniper",        dmg: 45, rate: 0.8, speed: 20, spread: 0.005, pellets: 1 },
+  { id: "minigun", name: "Minigun",       dmg: 5,  rate: 14,  speed: 12, spread: 0.18,  pellets: 1 },
+  { id: "cannon",  name: "Hand Cannon",   dmg: 30, rate: 1.2, speed: 14, spread: 0.03,  pellets: 1 },
+  { id: "laser",   name: "Laser Rifle",   dmg: 8,  rate: 8,   speed: 16, spread: 0.04,  pellets: 1 },
+];
+const MAX_LEVEL = 5;
+
+const baseOf = g => GUN_TYPES.find(t => t.id === g.type);
+// each upgrade level adds +12% of the gun's damage (but always at least +1)
+const gunDamage = g => {
+  const base = Math.round(baseOf(g).dmg * RARITIES[g.rarity].mult);
+  return base + (g.level - 1) * Math.max(1, Math.round(base * 0.12));
+};
+const gunPower    = g => gunDamage(g) * baseOf(g).rate * baseOf(g).pellets;
+const gunLabel    = g => RARITIES[g.rarity].name[0] + RARITIES[g.rarity].name.slice(1).toLowerCase() + " " + baseOf(g).name;
+const upgradeCost = g => RARITIES[g.rarity].upCost * g.level;
+
+// gun prices — better rarity costs a LOT more
+function gunPrice(type, rarity) {
+  const mult = { common: 0.8, rare: 2.5, mythic: 5.5, legendary: 11 }[rarity];
+  return Math.max(25, Math.round(gunPower({ type, rarity, level: 1 }) * mult / 5) * 5);
+}
+
+// the full gun store list: every gun in every rarity, in rarity order
+const GUN_CATALOG = [];
+for (const rar of RARITY_ORDER) {
+  const group = GUN_TYPES.map(t => ({ type: t.id, rarity: rar, key: t.id + "_" + rar, price: gunPrice(t.id, rar) }));
+  group.sort((a, b) => a.price - b.price);
+  GUN_CATALOG.push(...group);
+}
+
+// =====================================================================
+//  SAVING — coins, wins, and everything you bought get saved in the
+//  browser, so it's all still there next time.
+// =====================================================================
+const SAVE_KEY = "mechRoyaleSave_v1";
+// a brand-new save: 150 coins, only the free Rust Bucket mech and a bad Common Pistol
+function freshSave() {
+  return { coins: 150, wins: 0,
+           mechsOwned: [0], mechEquipped: 0,
+           gunsOwned: { pistol_common: 1 }, gunEquipped: "pistol_common",
+           codesUsed: {} };
+}
+let save;
+try { save = JSON.parse(localStorage.getItem(SAVE_KEY)); } catch (e) { save = null; }
+if (!save || !save.mechsOwned) save = freshSave();
+if (!save.codesUsed) save.codesUsed = {};   // remembers which secret codes you already used
+function persist() {
+  // saving can fail in some browsers (private mode etc.) — never crash the game for it
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) {}
+}
+
+// your equipped gun as an object: { type, rarity, level }
+function equippedGun() {
+  const key = save.gunsOwned[save.gunEquipped] ? save.gunEquipped : "pistol_common";
+  const [type, rarity] = key.split("_");
+  return { type, rarity, level: save.gunsOwned[key] || 1 };
+}
+
+// =====================================================================
+//  SOUNDS — little beeps made with code (no sound files needed)
+// =====================================================================
+let AC = null;
+let muted = false;
+try { muted = localStorage.getItem("mechMuted") === "1"; } catch (e) {}
+function ensureAudio() {
+  try {
+    if (!AC) AC = new (window.AudioContext || window.webkitAudioContext)();
+    if (AC && AC.state === "suspended") AC.resume();
+  } catch (e) {}
+}
+window.addEventListener("pointerdown", ensureAudio);
+window.addEventListener("keydown", ensureAudio);
+
+function beep(freq, dur, type = "square", vol = 0.1, slideTo = 0) {
+  // a broken sound must never break the game — worst case it just stays quiet
+  try {
+    if (muted || !AC) return;
+    const o = AC.createOscillator(), g = AC.createGain();
+    o.type = type;
+    o.frequency.setValueAtTime(freq, AC.currentTime);
+    if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, AC.currentTime + dur);
+    g.gain.setValueAtTime(vol, AC.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, AC.currentTime + dur);
+    o.connect(g); g.connect(AC.destination);
+    o.start(); o.stop(AC.currentTime + dur);
+  } catch (e) {}
+}
+const sndClick = () => beep(520, 0.06, "sine", 0.08);
+const sndCoin  = () => beep(660, 0.09, "sine", 0.1, 990);
+const sndHit   = () => beep(150, 0.08, "sawtooth", 0.08, 90);
+const sndDeath = () => beep(110, 0.4, "sawtooth", 0.14, 40);
+function sndShoot(base) { beep(Math.max(70, 260 - base.dmg * 4), 0.07, "square", 0.05, 55); }
+function sndFanfare(big) {
+  [440, 550, 660, big ? 880 : 660].forEach((f, i) => setTimeout(() => beep(f, 0.15, "square", 0.09), i * 110));
+}
+
+// =====================================================================
+//  MENU + STORES
+// =====================================================================
+let state = "menu";   // "menu" or "game" or "end"
+
+function showScreen(id) {
+  ["menu", "mechStore", "gunStore", "codesScreen", "endScreen"].forEach(s => $(s).classList.add("hidden"));
+  if (id) $(id).classList.remove("hidden");
+}
+function refreshLabels() {
+  $("menuCoins").textContent = "🪙 " + save.coins;
+  $("menuWins").textContent  = "🏆 Wins: " + save.wins;
+  $("mechCoins").textContent = "🪙 " + save.coins;
+  $("gunCoins").textContent  = "🪙 " + save.coins;
+  const g = equippedGun();
+  $("loadoutLine").textContent = "🤖 " + MECHS[save.mechEquipped].name + " • 🔫 " + gunLabel(g) +
+                                 (g.level > 1 ? " Lv" + g.level : "");
+}
+function goMenu() { state = "menu"; resetRestartBtn(); refreshLabels(); showScreen("menu"); }
+
+$("btnPlay").onclick  = () => { sndClick(); startMatch(); };
+$("btnMechs").onclick = () => { sndClick(); renderMechStore(); showScreen("mechStore"); };
+$("btnGuns").onclick  = () => { sndClick(); renderGunStore(); showScreen("gunStore"); };
+$("btnMechBack").onclick = () => { sndClick(); goMenu(); };
+$("btnGunBack").onclick  = () => { sndClick(); goMenu(); };
+$("btnAgain").onclick = () => { sndClick(); startMatch(); };
+$("btnMenu").onclick  = () => { sndClick(); goMenu(); };
+
+// =====================================================================
+//  SECRET CODES — type a secret code for free coins.
+//  The codes are NOT shown anywhere in the game — you have to already
+//  know them. Each code only works ONCE.
+// =====================================================================
+const CODES = [
+  { code: "TIMSTERLOVER36", reward: "+2000 🪙", apply: () => save.coins += 2000 },
+  { code: "GFJUI",          reward: "+1200 🪙", apply: () => save.coins += 1200 },
+];
+
+function redeemCode(raw) {
+  const code = (raw || "").trim().toUpperCase();
+  const msg = $("codeMsg");
+  if (!code) return;
+  const found = CODES.find(c => c.code === code);
+  if (!found) {
+    msg.textContent = "❌ That's not a real code";
+    msg.style.color = "#ef4444";
+    beep(140, 0.2, "sawtooth", 0.1, 90);
+  } else if (save.codesUsed[found.code]) {
+    msg.textContent = "⚠ You already used that code";
+    msg.style.color = "#f5c542";
+    sndClick();
+  } else {
+    found.apply();
+    save.codesUsed[found.code] = true;
+    persist();
+    msg.textContent = "✅ Secret code worked! " + found.reward;
+    msg.style.color = "#22c55e";
+    sndFanfare(true);
+  }
+  $("codeInput").value = "";
+  renderCodes();
+}
+
+function renderCodes() {
+  refreshLabels();
+  $("codesCoins").textContent = "🪙 " + save.coins;
+  // the codes are SECRET — we never list them anywhere. Just show a hint.
+  $("codeList").innerHTML = '<div class="codeHint">🔒 Secret codes are secret!<br>' +
+                            'Type one in above if you know it.</div>';
+}
+
+$("btnCodes").onclick = () => { sndClick(); $("codeMsg").innerHTML = "&nbsp;"; renderCodes(); showScreen("codesScreen"); };
+$("btnCodesBack").onclick = () => { sndClick(); goMenu(); };
+$("btnRedeem").onclick = () => redeemCode($("codeInput").value);
+$("codeInput").addEventListener("keydown", e => { if (e.key === "Enter") redeemCode($("codeInput").value); });
+
+// ---------- RESTART GAME — wipes EVERYTHING (coins, wins, mechs, guns) back to the start.
+//            Needs TWO taps so you can't wipe your stuff by accident. ----------
+let restartArmed = false, restartTimer = null;
+function resetRestartBtn() {
+  restartArmed = false;
+  if (restartTimer) { clearTimeout(restartTimer); restartTimer = null; }
+  const b = $("btnRestart");
+  b.textContent = "🔄 RESTART GAME";
+  b.classList.remove("danger");
+}
+$("btnRestart").onclick = () => {
+  const b = $("btnRestart");
+  if (!restartArmed) {
+    // first tap → ask "are you sure?"
+    restartArmed = true;
+    b.textContent = "⚠ TAP AGAIN to wipe everything!";
+    b.classList.add("danger");
+    sndClick();
+    restartTimer = setTimeout(resetRestartBtn, 3000);   // changes its mind after 3 seconds
+    return;
+  }
+  // second tap → really wipe it all and start over
+  if (restartTimer) { clearTimeout(restartTimer); restartTimer = null; }
+  restartArmed = false;
+  save = freshSave();
+  persist();
+  refreshLabels();
+  sndCoin();
+  b.classList.remove("danger");
+  b.textContent = "✅ Restarted! Fresh start 🎉";
+  restartTimer = setTimeout(resetRestartBtn, 1800);
+};
+
+// 🔊 mute button — turn all sound on/off (remembered next time you play)
+function updateMuteBtn() { $("btnMute").textContent = muted ? "🔇" : "🔊"; }
+$("btnMute").onclick = () => {
+  muted = !muted;
+  try { localStorage.setItem("mechMuted", muted ? "1" : "0"); } catch (e) {}
+  updateMuteBtn();
+  if (!muted) { ensureAudio(); sndClick(); }
+};
+updateMuteBtn();
+
+// ---------- the MECH STORE ----------
+function renderMechStore() {
+  refreshLabels();
+  const list = $("mechList");
+  list.innerHTML = "";
+  MECHS.forEach((m, i) => {
+    const col = RARITIES[m.rarity].color;
+    const owned = save.mechsOwned.includes(i);
+    const card = document.createElement("div");
+    card.className = "card" + (save.mechEquipped === i ? " equipped" : "");
+    card.style.borderColor = col;
+    card.innerHTML =
+      '<div class="cardRarity" style="color:' + col + '">' + RARITIES[m.rarity].name + '</div>' +
+      '<div class="cardName" style="color:' + col + '">' + m.name + '</div>' +
+      '<div class="cardStats">❤ ' + m.hp + ' health • ⚡ ' + m.speed + ' speed</div>' +
+      '<div class="row"></div>';
+    const row = card.querySelector(".row");
+
+    if (save.mechEquipped === i) {
+      row.innerHTML = '<div class="equippedTag">✔ EQUIPPED</div>';
+    } else if (owned) {
+      const eq = document.createElement("button");
+      eq.className = "btn"; eq.textContent = "EQUIP";
+      eq.onclick = () => { sndClick(); save.mechEquipped = i; persist(); renderMechStore(); };
+      row.appendChild(eq);
+    } else {
+      const buy = document.createElement("button");
+      buy.className = "btn"; buy.textContent = "BUY — " + m.price + " 🪙";
+      buy.disabled = save.coins < m.price;
+      buy.onclick = () => {
+        save.coins -= m.price;
+        save.mechsOwned.push(i);
+        save.mechEquipped = i;      // hop right into your new mech!
+        persist();
+        sndFanfare(m.rarity === "mythic" || m.rarity === "legendary");
+        renderMechStore();
+      };
+      row.appendChild(buy);
+    }
+    list.appendChild(card);
+  });
+}
+
+// ---------- the GUN STORE ----------
+function renderGunStore() {
+  refreshLabels();
+  const list = $("gunList");
+  list.innerHTML = "";
+  for (const item of GUN_CATALOG) {
+    const col = RARITIES[item.rarity].color;
+    const level = save.gunsOwned[item.key];
+    const g = { type: item.type, rarity: item.rarity, level: level || 1 };
+    const b = baseOf(g);
+    const card = document.createElement("div");
+    card.className = "card" + (save.gunEquipped === item.key ? " equipped" : "");
+    card.style.borderColor = col;
+    card.innerHTML =
+      '<div class="cardRarity" style="color:' + col + '">' + RARITIES[item.rarity].name + '</div>' +
+      '<div class="cardName" style="color:' + col + '">' + b.name + '</div>' +
+      '<div class="cardStats">' + (level ? "Lv " + level + " • " : "") + gunDamage(g) + " dmg • " + b.rate + " shots/s" +
+      (b.pellets > 1 ? " • " + b.pellets + " pellets" : "") + '</div>' +
+      '<div class="row"></div>';
+    const row = card.querySelector(".row");
+
+    if (!level) {
+      // you don't own it yet — buy it!
+      const buy = document.createElement("button");
+      buy.className = "btn"; buy.textContent = "BUY — " + item.price + " 🪙";
+      buy.disabled = save.coins < item.price;
+      buy.onclick = () => {
+        save.coins -= item.price;
+        save.gunsOwned[item.key] = 1;
+        save.gunEquipped = item.key;   // put it on your mech right away
+        persist();
+        sndFanfare(item.rarity === "mythic" || item.rarity === "legendary");
+        renderGunStore();
+      };
+      row.appendChild(buy);
+    } else {
+      if (save.gunEquipped === item.key) {
+        row.innerHTML = '<div class="equippedTag">✔ EQUIPPED</div>';
+      } else {
+        const eq = document.createElement("button");
+        eq.className = "btn"; eq.textContent = "EQUIP";
+        eq.onclick = () => { sndClick(); save.gunEquipped = item.key; persist(); renderGunStore(); };
+        row.appendChild(eq);
+      }
+      // upgrade it with coins
+      const up = document.createElement("button");
+      up.className = "btn";
+      if (level >= MAX_LEVEL) { up.textContent = "MAX LEVEL"; up.disabled = true; }
+      else {
+        const cost = upgradeCost(g);
+        up.textContent = "⬆ " + gunDamage(g) + "→" + gunDamage({ ...g, level: level + 1 }) + " dmg (" + cost + "🪙)";
+        up.disabled = save.coins < cost;
+        up.onclick = () => { save.coins -= cost; save.gunsOwned[item.key]++; persist(); sndCoin(); renderGunStore(); };
+      }
+      row.appendChild(up);
+    }
+    list.appendChild(card);
+  }
+}
+
+// =====================================================================
+//  THE ACTUAL GAME — a big world with blocks to hide behind,
+//  your mech, and 5 enemy mechs. Last mech standing wins!
+// =====================================================================
+const canvas = $("game"), ctx = canvas.getContext("2d");
+function resize() { canvas.width = innerWidth; canvas.height = innerHeight; }
+window.addEventListener("resize", resize); resize();
+
+const WORLD = { w: 2000, h: 1300 };
+const BOT_NAMES = ["Blaze", "ShadowX", "NoScope99", "Pickle", "DragonSlayer", "Sweaty Sam", "TacoTruck", "Zoomer"];
+
+let player, bots = [], blocks = [], bullets = [], particles = [], floaties = [], banners = [], healthPacks = [];
+let cam = { x: 0, y: 0 }, shake = 0, gameTime = 0, flash = 0, paused = false;
+let matchKills = 0, matchOver = false, streak = 0, lastKillTime = -99;
+const keys = {};
+let mouse = { x: 0, y: 0, down: false };
+
+const fighters = () => [player, ...bots];
+const KILL_COINS = 20, PLAY_COINS = 15, WIN_COINS = 150;
+const matchEarned = () => matchKills * KILL_COINS;
+
+// ---------- collision helpers ----------
+function collideCircleRect(cx, cy, r, b) {
+  const nx = clamp(cx, b.x, b.x + b.w), ny = clamp(cy, b.y, b.y + b.h);
+  return (cx - nx) ** 2 + (cy - ny) ** 2 < r * r;
+}
+const pointInRect = (x, y, b) => x > b.x && x < b.x + b.w && y > b.y && y < b.y + b.h;
+
+// Can fighter "a" see point "c", or is a block in the way? (this is how hiding works!)
+function canSee(a, c) {
+  const dx = c.x - a.x, dy = c.y - a.y, steps = Math.ceil(Math.hypot(dx, dy) / 16);
+  for (let i = 1; i < steps; i++) {
+    const x = a.x + dx * i / steps, y = a.y + dy * i / steps;
+    for (const b of blocks) if (pointInRect(x, y, b)) return false;
+  }
+  return true;
+}
+
+// Move but don't go through blocks (try x and y separately so you slide along walls)
+function moveFighter(f, dx, dy) {
+  f.x += dx; if (blocks.some(b => collideCircleRect(f.x, f.y, f.r, b))) f.x -= dx;
+  f.y += dy; if (blocks.some(b => collideCircleRect(f.x, f.y, f.r, b))) f.y -= dy;
+  f.x = clamp(f.x, f.r, WORLD.w - f.r);
+  f.y = clamp(f.y, f.r, WORLD.h - f.r);
+  f.walk += Math.hypot(dx, dy) * 0.14;   // makes the feet stomp while walking
+}
+
+// Find an empty spot on the map (not inside a block)
+function findSpot(r, awayFrom = null, minDist = 0) {
+  for (let i = 0; i < 300; i++) {
+    const x = r + 50 + Math.random() * (WORLD.w - 2 * r - 100);
+    const y = r + 50 + Math.random() * (WORLD.h - 2 * r - 100);
+    if (blocks.some(b => collideCircleRect(x, y, r + 10, b))) continue;
+    if (awayFrom && Math.hypot(x - awayFrom.x, y - awayFrom.y) < minDist) continue;
+    return { x, y };
+  }
+  return { x: WORLD.w / 2, y: WORLD.h / 2 };
+}
+
+function makeFighter(x, y, mech, gun, isPlayer, name) {
+  return { x, y, mech, gun, isPlayer, name,
+           r: 15 + Math.round(mech.hp / 50),        // bigger health = bigger mech
+           hp: mech.hp, maxHp: mech.hp, speed: mech.speed,
+           cooldown: 0, aim: 0, alive: true, lastHurt: -99, walk: 0, hitFlash: 0, dashCd: 0, dashT: 0,
+           wx: x, wy: y, wanderT: 0, strafeDir: 1, strafeT: 1, aimErr: 0.14 + Math.random() * 0.18 };
+}
+
+// bots mostly drive cheap mechs, but sometimes a scary one shows up
+function botMechIdx() {
+  const r = Math.random() * 100;
+  const rar = r < 2 ? "legendary" : r < 12 ? "mythic" : r < 45 ? "rare" : "common";
+  const pool = [];
+  MECHS.forEach((m, i) => { if (m.rarity === rar) pool.push(i); });
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+function botGun() {
+  const r = Math.random() * 100;
+  const rar = r < 2 ? "legendary" : r < 10 ? "mythic" : r < 40 ? "rare" : "common";
+  return { type: GUN_TYPES[Math.floor(Math.random() * GUN_TYPES.length)].id, rarity: rar, level: 1 };
+}
+
+// ---------- start a new match ----------
+function startMatch() {
+  // build random cover blocks
+  blocks = [];
+  for (let i = 0; i < 30; i++) {
+    const w = 50 + Math.random() * 120, h = 50 + Math.random() * 120;
+    blocks.push({ x: Math.random() * (WORLD.w - w), y: Math.random() * (WORLD.h - h), w, h });
+  }
+
+  // you — in the mech and gun you equipped
+  const myMech = MECHS[save.mechEquipped];
+  const pSpot = findSpot(15 + Math.round(myMech.hp / 50));
+  player = makeFighter(pSpot.x, pSpot.y, myMech, equippedGun(), true, "YOU");
+
+  // 5 enemy mechs
+  bots = [];
+  const names = [...BOT_NAMES].sort(() => Math.random() - 0.5).slice(0, 5);
+  for (let i = 0; i < 5; i++) {
+    const m = MECHS[botMechIdx()];
+    const s = findSpot(15 + Math.round(m.hp / 50), player, 350);
+    bots.push(makeFighter(s.x, s.y, m, botGun(), false, names[i]));
+  }
+
+  // scatter health packs around the map to heal at
+  healthPacks = [];
+  for (let i = 0; i < 5; i++) healthPacks.push({ ...findSpot(20, player, 160), taken: false, cd: 0 });
+
+  bullets = []; particles = []; floaties = []; banners = [];
+  matchKills = 0; matchOver = false; shake = 0; gameTime = 0; flash = 0;
+  streak = 0; lastKillTime = -99; paused = false;
+  cam.x = player.x - canvas.width / 2; cam.y = player.y - canvas.height / 2;
+  banner("Fight! Last mech standing wins 🏆", "#22d3ee");
+  showScreen(null);
+  state = "game";
+}
+
+function banner(txt, color = "#fff") { banners.unshift({ txt, color, life: 3 }); banners = banners.slice(0, 4); }
+function floaty(x, y, txt, color = "#fff") { floaties.push({ x, y, txt, color, life: 1 }); }
+
+// ---------- shooting ----------
+function tryShoot(f, angle) {
+  if (f.cooldown > 0 || !f.alive) return;
+  const b = baseOf(f.gun);
+  f.cooldown = 1 / b.rate;
+  for (let i = 0; i < b.pellets; i++) {
+    const a = angle + (Math.random() - 0.5) * 2 * b.spread;
+    bullets.push({
+      x: f.x + Math.cos(a) * (f.r + 16), y: f.y + Math.sin(a) * (f.r + 16),
+      vx: Math.cos(a) * b.speed * 45, vy: Math.sin(a) * b.speed * 45,
+      dmg: gunDamage(f.gun), owner: f, color: RARITIES[f.gun.rarity].color, life: 1.4,
+    });
+  }
+  for (let i = 0; i < 3; i++) particles.push({
+    x: f.x + Math.cos(angle) * (f.r + 18), y: f.y + Math.sin(angle) * (f.r + 18),
+    vx: Math.cos(angle) * 150 + (Math.random() - 0.5) * 80, vy: Math.sin(angle) * 150 + (Math.random() - 0.5) * 80,
+    life: 0.15, color: "#ffd166", size: 3,
+  });
+  if (f.isPlayer) { shake = Math.max(shake, 2.5); sndShoot(b); }
+  else if (dist(f, player) < 800) sndShoot(b);
+}
+
+function hurt(f, dmg, killer) {
+  if (!f.alive) return;
+  f.hp -= dmg;
+  f.lastHurt = gameTime;
+  f.hitFlash = 0.12;
+  floaty(f.x + (Math.random() - 0.5) * 20, f.y - f.r - 12, "-" + dmg, f.isPlayer ? "#ff6b6b" : "#ffd166");
+  if (f.isPlayer) { shake = Math.max(shake, 7); flash = Math.max(flash, 0.5); sndHit(); }
+  if (f.hp <= 0) {
+    f.alive = false;
+    sndDeath();
+    for (let i = 0; i < 26; i++) particles.push({
+      x: f.x, y: f.y, vx: (Math.random() - 0.5) * 420, vy: (Math.random() - 0.5) * 420,
+      life: 0.6, color: i % 4 ? f.mech.color : "#fff", size: 4,
+    });
+    banner("💥 " + (killer ? killer.name + " destroyed " + f.name : f.name + " is destroyed"),
+           killer && killer.isPlayer ? "#22c55e" : "#c3c9de");
+    if (killer && killer.isPlayer && !f.isPlayer) {
+      matchKills++;
+      floaty(f.x, f.y - 40, "+" + KILL_COINS + " 🪙", "#f5c542");
+      sndCoin();
+      // KILL STREAK! two or more quick kills in a row gets a shout-out
+      streak = (gameTime - lastKillTime < 4) ? streak + 1 : 1;
+      lastKillTime = gameTime;
+      const shout = { 2: "DOUBLE KILL!", 3: "TRIPLE KILL!", 4: "MULTI KILL!", 5: "RAMPAGE!", 6: "UNSTOPPABLE!" };
+      if (streak >= 2) { banner("🔥 " + (shout[Math.min(streak, 6)] || "GODLIKE!!!"), "#f5a623"); sndFanfare(true); }
+    }
+  }
+}
+
+// ---------- bot brain ----------
+function updateBot(b, dt) {
+  b.cooldown -= dt;
+  // look for the closest enemy it can actually see
+  let target = null, bestD = 560;
+  for (const f of fighters()) {
+    if (f === b || !f.alive) continue;
+    const d = dist(b, f);
+    if (d < bestD && canSee(b, f)) { target = f; bestD = d; }
+  }
+  if (target) {
+    const a = Math.atan2(target.y - b.y, target.x - b.x);
+    // strafe side to side, get closer if far, back off if too close
+    let mx = Math.cos(a + Math.PI / 2 * b.strafeDir), my = Math.sin(a + Math.PI / 2 * b.strafeDir);
+    if (bestD > 280) { mx += Math.cos(a); my += Math.sin(a); }
+    else if (bestD < 150) { mx -= Math.cos(a); my -= Math.sin(a); }
+    b.strafeT -= dt;
+    if (b.strafeT <= 0) { b.strafeDir *= -1; b.strafeT = 1 + Math.random() * 1.5; }
+    const m = Math.hypot(mx, my) || 1;
+    moveFighter(b, mx / m * b.speed * 0.8 * dt, my / m * b.speed * 0.8 * dt);
+    b.aim = a + (Math.random() - 0.5) * b.aimErr;   // bots don't have perfect aim
+    tryShoot(b, b.aim);
+  } else {
+    // nobody in sight — wander around the map
+    b.wanderT -= dt;
+    if (b.wanderT <= 0 || dist(b, { x: b.wx, y: b.wy }) < 40) {
+      b.wx = 80 + Math.random() * (WORLD.w - 160);
+      b.wy = 80 + Math.random() * (WORLD.h - 160);
+      b.wanderT = 3 + Math.random() * 3;
+    }
+    const a = Math.atan2(b.wy - b.y, b.wx - b.x);
+    b.aim = a;
+    moveFighter(b, Math.cos(a) * b.speed * 0.55 * dt, Math.sin(a) * b.speed * 0.55 * dt);
+  }
+}
+
+// ---------- match end ----------
+function endMatch(won, leftEarly) {
+  if (matchOver) return;
+  matchOver = true;
+  state = "end";
+  try {
+    const bonus = PLAY_COINS + (won ? WIN_COINS : 0);
+
+    // show the end screen FIRST — the player must never get stuck on a frozen battlefield
+    const place = won ? 1 : bots.filter(b => b.alive).length + 1;
+    $("endTitle").textContent = leftEarly ? "🏃 You left the match" : won ? "🏆 VICTORY!" : "💥 You placed #" + place;
+    $("endTitle").style.color = won ? "#f5c542" : "#fff";
+    $("endStats").innerHTML =
+      "🎯 Kills: " + matchKills + " → +" + matchKills * KILL_COINS + " 🪙<br>" +
+      "🎮 Played: +" + PLAY_COINS + " 🪙<br>" +
+      (won ? "🏆 Win bonus: +" + WIN_COINS + " 🪙<br>" : "") +
+      "<b style='color:#f5c542'>Total earned: +" + (matchEarned() + bonus) + " 🪙</b>";
+    showScreen("endScreen");
+
+    // then bank the coins and save
+    if (won) { save.wins++; sndFanfare(true); }
+    save.coins += matchEarned() + bonus;
+    persist();
+    refreshLabels();
+  } catch (e) {
+    // absolute last resort: whatever just broke, STILL show an end screen with buttons
+    console.error(e);
+    document.querySelectorAll(".screen").forEach(s => s.classList.add("hidden"));
+    const end = document.getElementById("endScreen");
+    if (end) end.classList.remove("hidden");
+    const t = document.getElementById("endTitle");
+    if (t) t.textContent = won ? "🏆 VICTORY!" : "💥 Match over";
+    const st = document.getElementById("endStats");
+    if (st) st.innerHTML = "⚠ Small bug here (" + e.message + ") — your match still counted!";
+  }
+}
+
+// ---------- update everything each frame ----------
+function update(dt) {
+  gameTime += dt;
+
+  // --- you ---
+  if (player.alive) {
+    player.dashCd -= dt; player.dashT -= dt;
+    let dx = (keys.d || keys.arrowright ? 1 : 0) - (keys.a || keys.arrowleft ? 1 : 0);
+    let dy = (keys.s || keys.arrowdown ? 1 : 0) - (keys.w || keys.arrowup ? 1 : 0);
+    const moving = dx || dy;
+    const m = Math.hypot(dx, dy) || 1;
+    // DASH — tap SPACE to zoom in your move direction (short cooldown)
+    if (keys[" "] && player.dashCd <= 0 && moving) {
+      player.dashT = 0.15; player.dashCd = 1.4;
+      beep(320, 0.12, "sine", 0.08, 640);
+    }
+    const spd = player.speed * (player.dashT > 0 ? 3 : 1);
+    moveFighter(player, dx / m * spd * dt, dy / m * spd * dt);
+    if (player.dashT > 0) particles.push({ x: player.x, y: player.y, vx: 0, vy: 0, life: 0.22, color: "#7ef9ff", size: player.r });
+
+    player.aim = Math.atan2(mouse.y + cam.y - player.y, mouse.x + cam.x - player.x);
+    player.cooldown -= dt;
+    if (mouse.down) tryShoot(player, player.aim);
+
+    // slowly repair if you hide and don't get hit for 4 seconds
+    if (gameTime - player.lastHurt > 4 && player.hp < player.maxHp)
+      player.hp = Math.min(player.maxHp, player.hp + player.maxHp * 0.1 * dt);
+
+    // grab a health pack by walking over it (only when you're hurt)
+    for (const pk of healthPacks) {
+      if (pk.taken || player.hp >= player.maxHp) continue;
+      if (dist(player, pk) < player.r + 16) {
+        pk.taken = true; pk.cd = 12;
+        const heal = Math.min(40, player.maxHp - player.hp);
+        player.hp += heal;
+        floaty(pk.x, pk.y - 22, "+" + Math.round(heal) + " ❤", "#22c55e");
+        beep(520, 0.12, "sine", 0.1, 780);
+        for (let i = 0; i < 10; i++) particles.push({ x: pk.x, y: pk.y, vx: (Math.random() - .5) * 160, vy: (Math.random() - .5) * 160, life: 0.4, color: "#22c55e", size: 3 });
+      }
+    }
+  }
+
+  // health packs come back a few seconds after being used; hit-flashes fade out
+  for (const pk of healthPacks) if (pk.taken) { pk.cd -= dt; if (pk.cd <= 0) pk.taken = false; }
+  for (const f of fighters()) if (f.hitFlash > 0) f.hitFlash -= dt;
+
+  // --- enemy mechs ---
+  for (const b of bots) if (b.alive) updateBot(b, dt);
+
+  // --- bullets ---
+  for (let i = bullets.length - 1; i >= 0; i--) {
+    const bu = bullets[i];
+    bu.x += bu.vx * dt; bu.y += bu.vy * dt; bu.life -= dt;
+    let dead = bu.life <= 0 || bu.x < 0 || bu.x > WORLD.w || bu.y < 0 || bu.y > WORLD.h;
+
+    // bullets stop at blocks — that's why hiding works
+    if (!dead) for (const bl of blocks) if (pointInRect(bu.x, bu.y, bl)) {
+      dead = true;
+      for (let p = 0; p < 3; p++) particles.push({
+        x: bu.x, y: bu.y, vx: (Math.random() - 0.5) * 160, vy: (Math.random() - 0.5) * 160,
+        life: 0.25, color: "#8b93b0", size: 2,
+      });
+      break;
+    }
+    if (!dead) for (const f of fighters()) {
+      if (!f.alive || f === bu.owner) continue;
+      if (dist(f, bu) < f.r + 4) { hurt(f, bu.dmg, bu.owner); dead = true; break; }
+    }
+    if (dead) bullets.splice(i, 1);
+  }
+
+  // --- sparkles and popup text ---
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.x += p.vx * dt; p.y += p.vy * dt; p.life -= dt;
+    if (p.life <= 0) particles.splice(i, 1);
+  }
+  for (let i = floaties.length - 1; i >= 0; i--) {
+    const f = floaties[i];
+    f.y -= 45 * dt; f.life -= dt * 0.9;
+    if (f.life <= 0) floaties.splice(i, 1);
+  }
+  for (let i = banners.length - 1; i >= 0; i--) {
+    banners[i].life -= dt;
+    if (banners[i].life <= 0) banners.splice(i, 1);
+  }
+
+  // --- camera follows you ---
+  const camMax = (v, world, view) => world - view < 0 ? (world - view) / 2 : clamp(v, -40, world - view + 40);
+  cam.x += (player.x - canvas.width / 2 - cam.x) * 0.12;
+  cam.y += (player.y - canvas.height / 2 - cam.y) * 0.12;
+  cam.x = camMax(cam.x, WORLD.w, canvas.width);
+  cam.y = camMax(cam.y, WORLD.h, canvas.height);
+  shake = Math.max(0, shake - 30 * dt);
+  flash = Math.max(0, flash - dt * 2.5);
+
+  // --- did somebody win? (checking victory first — if you and the last
+  //     enemy blow up on the same frame, you still get the win!) ---
+  if (bots.every(b => !b.alive)) endMatch(true);
+  else if (!player.alive) endMatch(false);
+}
+
+// ---------- drawing a mech (feet, body, shoulder pods, cockpit, gun) ----------
+function drawMech(f) {
+  const rc = RARITIES[f.mech.rarity].color;
+  ctx.save();
+  ctx.translate(f.x, f.y);
+  ctx.rotate(f.aim);
+  // stomping feet
+  const step = Math.sin(f.walk) * f.r * 0.45;
+  ctx.fillStyle = "#14182b";
+  ctx.fillRect(-f.r * 0.2 + step, -f.r * 0.95, f.r * 0.55, f.r * 0.5);
+  ctx.fillRect(-f.r * 0.2 - step, f.r * 0.45, f.r * 0.55, f.r * 0.5);
+  // gun barrel (tip colored by gun rarity)
+  ctx.fillStyle = "#20263f"; ctx.fillRect(f.r * 0.3, -4, f.r * 0.9 + 14, 8);
+  ctx.fillStyle = RARITIES[f.gun.rarity].color; ctx.fillRect(f.r * 1.2 + 8, -4, 7, 8);
+  // body (edge colored by mech rarity)
+  ctx.fillStyle = f.mech.color;
+  ctx.fillRect(-f.r * 0.8, -f.r * 0.7, f.r * 1.6, f.r * 1.4);
+  ctx.strokeStyle = rc; ctx.lineWidth = 2.5;
+  ctx.strokeRect(-f.r * 0.8, -f.r * 0.7, f.r * 1.6, f.r * 1.4);
+  // flash white for a split second when hit
+  if (f.hitFlash > 0) {
+    ctx.globalAlpha = Math.min(1, f.hitFlash * 6);
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(-f.r * 0.8, -f.r * 0.7, f.r * 1.6, f.r * 1.4);
+    ctx.globalAlpha = 1;
+  }
+  // shoulder pods
+  ctx.fillStyle = "rgba(0,0,0,0.35)";
+  ctx.fillRect(-f.r * 0.85, -f.r * 0.9, f.r * 0.7, f.r * 0.38);
+  ctx.fillRect(-f.r * 0.85, f.r * 0.52, f.r * 0.7, f.r * 0.38);
+  // glowing cockpit
+  ctx.fillStyle = "#0e1120";
+  ctx.beginPath(); ctx.arc(f.r * 0.15, 0, f.r * 0.32, 0, 7); ctx.fill();
+  ctx.fillStyle = f.isPlayer ? "#7ef9ff" : "#ff9b9b";
+  ctx.beginPath(); ctx.arc(f.r * 0.22, 0, f.r * 0.17, 0, 7); ctx.fill();
+  ctx.restore();
+  // name + health bar floating above
+  ctx.fillStyle = f.isPlayer ? "#22d3ee" : "#dfe4f5";
+  ctx.font = "bold 13px Arial"; ctx.textAlign = "center";
+  ctx.fillText(f.name, f.x, f.y - f.r - 18);
+  ctx.fillStyle = "rgba(0,0,0,0.55)";
+  ctx.fillRect(f.x - 22, f.y - f.r - 14, 44, 6);
+  const pct = Math.max(0, f.hp) / f.maxHp;
+  ctx.fillStyle = pct > 0.55 ? "#22c55e" : pct > 0.25 ? "#f5c542" : "#ef4444";
+  ctx.fillRect(f.x - 22, f.y - f.r - 14, 44 * pct, 6);
+}
+
+// ---------- draw everything each frame ----------
+function draw() {
+  ctx.fillStyle = "#171b2e";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.save();
+  ctx.translate(-cam.x + (Math.random() - 0.5) * shake, -cam.y + (Math.random() - 0.5) * shake);
+
+  // floor grid
+  ctx.strokeStyle = "rgba(255,255,255,0.05)";
+  ctx.lineWidth = 1;
+  for (let x = 0; x <= WORLD.w; x += 80) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, WORLD.h); ctx.stroke(); }
+  for (let y = 0; y <= WORLD.h; y += 80) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(WORLD.w, y); ctx.stroke(); }
+  ctx.strokeStyle = "#3a4266"; ctx.lineWidth = 6;
+  ctx.strokeRect(0, 0, WORLD.w, WORLD.h);
+
+  // cover blocks
+  for (const b of blocks) {
+    ctx.fillStyle = "#2c3350";
+    ctx.fillRect(b.x, b.y, b.w, b.h);
+    ctx.fillStyle = "#3d466b";
+    ctx.fillRect(b.x, b.y, b.w, 7);
+    ctx.strokeStyle = "#1b2138"; ctx.lineWidth = 2;
+    ctx.strokeRect(b.x, b.y, b.w, b.h);
+  }
+
+  // health packs (green +) — walk over them to heal
+  for (const pk of healthPacks) {
+    if (pk.taken) continue;
+    const bob = Math.sin(gameTime * 3 + pk.x) * 3;
+    ctx.fillStyle = "#0e1a12"; ctx.fillRect(pk.x - 13, pk.y - 13 + bob, 26, 26);
+    ctx.strokeStyle = "#22c55e"; ctx.lineWidth = 2; ctx.strokeRect(pk.x - 13, pk.y - 13 + bob, 26, 26);
+    ctx.fillStyle = "#22c55e";
+    ctx.fillRect(pk.x - 3, pk.y - 9 + bob, 6, 18);
+    ctx.fillRect(pk.x - 9, pk.y - 3 + bob, 18, 6);
+  }
+
+  // bullets
+  for (const bu of bullets) {
+    ctx.strokeStyle = bu.color; ctx.lineWidth = 2; ctx.globalAlpha = 0.5;
+    ctx.beginPath(); ctx.moveTo(bu.x - bu.vx * 0.02, bu.y - bu.vy * 0.02); ctx.lineTo(bu.x, bu.y); ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = bu.color;
+    ctx.beginPath(); ctx.arc(bu.x, bu.y, 3.5, 0, 7); ctx.fill();
+  }
+
+  // all the mechs
+  for (const f of fighters()) if (f.alive) drawMech(f);
+
+  // sparkles
+  for (const p of particles) {
+    ctx.globalAlpha = Math.max(0, p.life * 2.5);
+    ctx.fillStyle = p.color;
+    ctx.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size);
+  }
+  ctx.globalAlpha = 1;
+
+  // popup texts (damage, coins)
+  ctx.font = "bold 16px Arial"; ctx.textAlign = "center";
+  for (const f of floaties) {
+    ctx.globalAlpha = Math.max(0, f.life);
+    ctx.fillStyle = f.color;
+    ctx.fillText(f.txt, f.x, f.y);
+  }
+  ctx.globalAlpha = 1;
+  ctx.restore();
+
+  // red danger vignette when your health is low
+  const hpPct = Math.max(0, player.hp) / player.maxHp;
+  if (player.alive && hpPct < 0.3) {
+    const g = ctx.createRadialGradient(canvas.width / 2, canvas.height / 2, canvas.height * 0.3, canvas.width / 2, canvas.height / 2, canvas.height * 0.75);
+    g.addColorStop(0, "rgba(239,68,68,0)");
+    g.addColorStop(1, "rgba(239,68,68," + (0.4 * (1 - hpPct / 0.3)).toFixed(3) + ")");
+    ctx.fillStyle = g; ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
+  // quick red flash when you take a hit
+  if (flash > 0) { ctx.fillStyle = "rgba(255,70,70," + (flash * 0.3).toFixed(3) + ")"; ctx.fillRect(0, 0, canvas.width, canvas.height); }
+
+  // ============ HUD (the info on top of the screen) ============
+  // health bar
+  ctx.fillStyle = "rgba(0,0,0,0.5)"; ctx.fillRect(18, 18, 224, 22);
+  const pct = Math.max(0, player.hp) / player.maxHp;
+  ctx.fillStyle = pct > 0.55 ? "#22c55e" : pct > 0.25 ? "#f5c542" : "#ef4444";
+  ctx.fillRect(20, 20, 220 * pct, 18);
+  ctx.fillStyle = "#fff"; ctx.font = "bold 14px Arial"; ctx.textAlign = "left";
+  ctx.fillText("❤ " + Math.ceil(Math.max(0, player.hp)) + " / " + player.maxHp, 26, 35);
+  ctx.fillText("🎯 " + matchKills + "   🪙 " + matchEarned(), 20, 62);
+
+  // dash cooldown pip
+  const dashReady = player.dashCd <= 0;
+  ctx.fillStyle = "rgba(0,0,0,0.5)"; ctx.fillRect(20, 72, 150, 14);
+  ctx.fillStyle = dashReady ? "#7ef9ff" : "#39456b";
+  ctx.fillRect(20, 72, 150 * clamp(1 - player.dashCd / 1.4, 0, 1), 14);
+  ctx.fillStyle = dashReady ? "#04121a" : "#aab2d0"; ctx.font = "bold 10px Arial"; ctx.textAlign = "left";
+  ctx.fillText(dashReady ? "⚡ DASH READY (SPACE)" : "⚡ dash…", 26, 82);
+
+  // mechs left (sits below the mute button)
+  const alive = fighters().filter(f => f.alive).length;
+  ctx.textAlign = "right";
+  ctx.font = "bold 20px Arial";
+  ctx.fillStyle = "#fff";
+  ctx.fillText("🤖 " + alive + " LEFT", canvas.width - 20, 84);
+
+  // your mech + gun
+  ctx.textAlign = "left"; ctx.font = "bold 18px Arial";
+  ctx.fillStyle = RARITIES[player.mech.rarity].color;
+  ctx.fillText("🤖 " + player.mech.name, 20, canvas.height - 64);
+  ctx.fillStyle = RARITIES[player.gun.rarity].color;
+  ctx.fillText(gunLabel(player.gun) + (player.gun.level > 1 ? "  Lv" + player.gun.level : ""), 20, canvas.height - 40);
+  ctx.fillStyle = "#aab2d0"; ctx.font = "13px Arial";
+  ctx.fillText(gunDamage(player.gun) + " dmg • " + baseOf(player.gun).rate + " shots/s     SPACE dash • P pause • ESC leave", 20, canvas.height - 20);
+
+  // announcements
+  ctx.textAlign = "center";
+  banners.forEach((b, i) => {
+    ctx.globalAlpha = clamp(b.life, 0, 1);
+    ctx.font = "bold 22px Arial";
+    ctx.fillStyle = b.color;
+    ctx.fillText(b.txt, canvas.width / 2, 120 + i * 32);
+  });
+  ctx.globalAlpha = 1;
+
+  // ---------- minimap (bottom-right) — see where everyone is ----------
+  const mmW = 168, mmH = Math.round(mmW * WORLD.h / WORLD.w);
+  const mmX = canvas.width - mmW - 14, mmY = canvas.height - mmH - 14;
+  const sx = mmW / WORLD.w, sy = mmH / WORLD.h;
+  ctx.fillStyle = "rgba(10,14,28,0.82)"; ctx.fillRect(mmX, mmY, mmW, mmH);
+  ctx.strokeStyle = "#3a4266"; ctx.lineWidth = 2; ctx.strokeRect(mmX, mmY, mmW, mmH);
+  ctx.fillStyle = "#2c3350";
+  for (const b of blocks) ctx.fillRect(mmX + b.x * sx, mmY + b.y * sy, Math.max(1, b.w * sx), Math.max(1, b.h * sy));
+  ctx.fillStyle = "#22c55e";
+  for (const pk of healthPacks) if (!pk.taken) ctx.fillRect(mmX + pk.x * sx - 1.5, mmY + pk.y * sy - 1.5, 3, 3);
+  ctx.fillStyle = "#ef4444";
+  for (const b of bots) if (b.alive) { ctx.beginPath(); ctx.arc(mmX + b.x * sx, mmY + b.y * sy, 2.6, 0, 7); ctx.fill(); }
+  if (player.alive) { ctx.fillStyle = "#22d3ee"; ctx.beginPath(); ctx.arc(mmX + player.x * sx, mmY + player.y * sy, 3.2, 0, 7); ctx.fill(); }
+}
+
+// ---------- controls ----------
+window.addEventListener("keydown", e => {
+  keys[e.key.toLowerCase()] = true;
+  if (e.key === "Escape" && state === "game") endMatch(false, true);
+  if (e.key.toLowerCase() === "p" && state === "game") paused = !paused;
+  if (["arrowup", "arrowdown", "arrowleft", "arrowright", " "].includes(e.key.toLowerCase())) e.preventDefault();
+});
+window.addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
+canvas.addEventListener("mousemove", e => { mouse.x = e.clientX; mouse.y = e.clientY; });
+canvas.addEventListener("mousedown", () => mouse.down = true);
+window.addEventListener("mouseup", () => mouse.down = false);
+canvas.addEventListener("contextmenu", e => e.preventDefault());
+
+// dark overlay shown when the game is paused
+function drawPauseOverlay() {
+  ctx.fillStyle = "rgba(8,10,20,0.62)";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = "#22d3ee"; ctx.textAlign = "center"; ctx.font = "bold 52px Arial";
+  ctx.fillText("⏸ PAUSED", canvas.width / 2, canvas.height / 2 - 10);
+  ctx.fillStyle = "#aab2d0"; ctx.font = "20px Arial";
+  ctx.fillText("press P to resume", canvas.width / 2, canvas.height / 2 + 34);
+}
+
+// ---------- the game loop (runs about 60 times per second) ----------
+let lastT = performance.now(), badFrames = 0;
+function tick(now) {
+  requestAnimationFrame(tick);
+  const dt = Math.min((now - lastT) / 1000, 0.05);
+  lastT = now;
+  if (state !== "game") return;
+  // if one frame breaks, skip it and keep playing — the game must NEVER freeze
+  try {
+    if (!paused) update(dt);
+    if (state === "game") { draw(); if (paused) drawPauseOverlay(); }
+    badFrames = 0;
+  } catch (e) {
+    console.error(e);
+    banner("⚠ " + e.message, "#ef4444");
+    if (++badFrames > 120) endMatch(false, true);   // 2s of broken frames → bail out safely
+  }
+}
+requestAnimationFrame(tick);
+
+// if anything else ever goes wrong, show it on screen so it can be reported
+window.addEventListener("error", e => banner("⚠ Bug: " + e.message, "#ef4444"));
+
+// show the menu when the page opens
+goMenu();
+</script>
+</body>
+</html>
