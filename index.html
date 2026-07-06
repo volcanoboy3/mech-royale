@@ -2,13 +2,13 @@
 <html>
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>Mech Royale</title>
 <style>
   /* ============ LOOK OF THE WHOLE PAGE ============ */
   * { box-sizing: border-box; user-select: none; }
   body { margin: 0; background: #0f1220; color: #fff; font-family: Arial, Helvetica, sans-serif; overflow: hidden; }
-  canvas { position: fixed; inset: 0; display: block; cursor: crosshair; }
+  canvas { position: fixed; inset: 0; display: block; cursor: crosshair; touch-action: none; }
 
   /* ============ MENU SCREENS (the pages with buttons) ============ */
   .screen { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center;
@@ -68,6 +68,23 @@
              background: rgba(35,42,69,0.88); border: 2px solid #3a4266; border-radius: 10px;
              padding: 6px 12px; cursor: pointer; }
   #btnMute:hover { border-color: #22d3ee; }
+
+  /* on-screen phone buttons (pause + dash) — hidden on desktop */
+  #btnPause { position: fixed; top: 12px; right: 70px; z-index: 6; font-size: 18px;
+              background: rgba(35,42,69,0.88); border: 2px solid #3a4266; border-radius: 10px; padding: 6px 12px; cursor: pointer; color:#fff; }
+  #btnDash { position: fixed; right: 18px; bottom: 152px; z-index: 6; width: 70px; height: 70px; border-radius: 50%;
+             font-size: 28px; background: rgba(34,211,238,0.16); border: 2px solid #22d3ee; color: #eafcff; cursor: pointer; }
+  #btnPause, #btnDash { display: none; }
+  body.touch #btnPause, body.touch #btnDash { display: block; }
+
+  /* keep menus usable on small phone screens */
+  @media (max-width: 560px) {
+    h1 { font-size: 38px; }
+    h2 { font-size: 26px; }
+    .btn { min-width: min(300px, 84vw); font-size: 18px; padding: 12px 20px; }
+    .btn.big { font-size: 22px; padding: 14px 30px; }
+    .screen { gap: 10px; padding: 10px; }
+  }
 
   /* ============ MODE SELECT ============ */
   .modeBox { background: #1a1f36; border: 2px solid #3a4266; border-radius: 14px;
@@ -157,6 +174,8 @@
 </div>
 
 <button id="btnMute">🔊</button>
+<button id="btnPause">⏸</button>
+<button id="btnDash">⚡</button>
 <canvas id="game"></canvas>
 
 <script>
@@ -577,10 +596,18 @@ let cam = { x: 0, y: 0 }, shake = 0, gameTime = 0, flash = 0, paused = false;
 let matchKills = 0, matchOver = false, streak = 0, lastKillTime = -99;
 const keys = {};
 let mouse = { x: 0, y: 0, down: false };
+// phone touch controls: left thumbstick moves, right thumbstick aims+fires
+let moveStick = null, aimStick = null, dashPressed = false;
+const isTouch = ("ontouchstart" in window) || navigator.maxTouchPoints > 0;
 
 const fighters = () => [player, ...bots];
-const KILL_COINS = 20, PLAY_COINS = 15, WIN_COINS = 150;
-const matchEarned = () => matchKills * KILL_COINS;
+// more players fighting = more coins! (a multiplier set per match)
+const BASE_KILL = 20, BASE_PLAY = 15, BASE_WIN = 150;
+let matchCoinMult = 1;
+const killCoins = () => Math.round(BASE_KILL * matchCoinMult);
+const playCoins = () => Math.round(BASE_PLAY * matchCoinMult);
+const winCoins  = () => Math.round(BASE_WIN * matchCoinMult);
+const matchEarned = () => matchKills * killCoins();
 
 // ---------- collision helpers ----------
 function collideCircleRect(cx, cy, r, b) {
@@ -658,6 +685,7 @@ function startMatch(cfg) {
   matchTeamSize = size;
   lastCfg = { mode: matchMode, size };
   const total = matchMode === "teams" ? size * 2 : size;
+  matchCoinMult = clamp(total / 6, 1, 10);   // the more mechs fighting, the more coins you earn
 
   // grow the arena so everyone fits
   const scale = clamp(Math.sqrt(total / 6), 1, 4);
@@ -705,6 +733,7 @@ function startMatch(cfg) {
   bullets = []; particles = []; floaties = []; banners = [];
   matchKills = 0; matchOver = false; shake = 0; gameTime = 0; flash = 0;
   streak = 0; lastKillTime = -99; paused = false;
+  moveStick = null; aimStick = null; dashPressed = false;
   cam.x = player.x - canvas.width / 2; cam.y = player.y - canvas.height / 2;
   banner(matchMode === "teams" ? "⚔️ " + size + "v" + size + " — wipe out the 🟥 RED team!"
                                : "⚔️ " + size + "-player FREE FOR ALL — GO!", "#22d3ee");
@@ -757,7 +786,7 @@ function hurt(f, dmg, killer) {
            killer && killer.isPlayer ? "#22c55e" : "#c3c9de");
     if (killer && killer.isPlayer && !f.isPlayer) {
       matchKills++;
-      floaty(f.x, f.y - 40, "+" + KILL_COINS + " 🪙", "#f5c542");
+      floaty(f.x, f.y - 40, "+" + killCoins() + " 🪙", "#f5c542");
       sndCoin();
       // KILL STREAK! two or more quick kills in a row gets a shout-out
       streak = (gameTime - lastKillTime < 4) ? streak + 1 : 1;
@@ -811,7 +840,7 @@ function endMatch(won, leftEarly) {
   matchOver = true;
   state = "end";
   try {
-    const bonus = PLAY_COINS + (won ? WIN_COINS : 0);
+    const bonus = playCoins() + (won ? winCoins() : 0);
 
     // show the end screen FIRST — the player must never get stuck on a frozen battlefield
     const place = won ? 1 : bots.filter(b => b.alive).length + 1;
@@ -820,9 +849,10 @@ function endMatch(won, leftEarly) {
       : (matchMode === "teams" ? "💥 DEFEAT — your team lost" : "💥 You placed #" + place);
     $("endTitle").style.color = won ? "#f5c542" : "#fff";
     $("endStats").innerHTML =
-      "🎯 Kills: " + matchKills + " → +" + matchKills * KILL_COINS + " 🪙<br>" +
-      "🎮 Played: +" + PLAY_COINS + " 🪙<br>" +
-      (won ? "🏆 Win bonus: +" + WIN_COINS + " 🪙<br>" : "") +
+      (matchCoinMult > 1.05 ? "🔥 Big-battle bonus: <b>x" + matchCoinMult.toFixed(1) + "</b> coins!<br>" : "") +
+      "🎯 Kills: " + matchKills + " → +" + (matchKills * killCoins()) + " 🪙<br>" +
+      "🎮 Played: +" + playCoins() + " 🪙<br>" +
+      (won ? "🏆 Win bonus: +" + winCoins() + " 🪙<br>" : "") +
       "<b style='color:#f5c542'>Total earned: +" + (matchEarned() + bonus) + " 🪙</b>";
     showScreen("endScreen");
 
@@ -853,20 +883,33 @@ function update(dt) {
     player.dashCd -= dt; player.dashT -= dt;
     let dx = (keys.d || keys.arrowright ? 1 : 0) - (keys.a || keys.arrowleft ? 1 : 0);
     let dy = (keys.s || keys.arrowdown ? 1 : 0) - (keys.w || keys.arrowup ? 1 : 0);
-    const moving = dx || dy;
+    // phone: the left thumbstick overrides WASD
+    if (moveStick) {
+      const ox = moveStick.cx - moveStick.bx, oy = moveStick.cy - moveStick.by, L = Math.hypot(ox, oy);
+      if (L > 14) { dx = ox / L; dy = oy / L; }
+    }
+    const moving = Math.abs(dx) > 0.01 || Math.abs(dy) > 0.01;
     const m = Math.hypot(dx, dy) || 1;
-    // DASH — tap SPACE to zoom in your move direction (short cooldown)
-    if (keys[" "] && player.dashCd <= 0 && moving) {
+    // DASH — SPACE or the on-screen ⚡ button, to zoom in your move direction
+    if ((keys[" "] || dashPressed) && player.dashCd <= 0 && moving) {
       player.dashT = 0.15; player.dashCd = 1.4;
       beep(320, 0.12, "sine", 0.08, 640);
     }
+    dashPressed = false;
     const spd = player.speed * (player.dashT > 0 ? 3 : 1);
     moveFighter(player, dx / m * spd * dt, dy / m * spd * dt);
     if (player.dashT > 0) particles.push({ x: player.x, y: player.y, vx: 0, vy: 0, life: 0.22, color: "#7ef9ff", size: player.r });
 
-    player.aim = Math.atan2(mouse.y + cam.y - player.y, mouse.x + cam.x - player.x);
     player.cooldown -= dt;
-    if (mouse.down) tryShoot(player, player.aim);
+    // phone: the right thumbstick aims and auto-fires; on desktop the mouse aims & click fires
+    if (aimStick) {
+      const ox = aimStick.cx - aimStick.bx, oy = aimStick.cy - aimStick.by;
+      if (Math.hypot(ox, oy) > 8) player.aim = Math.atan2(oy, ox);
+      tryShoot(player, player.aim);
+    } else {
+      player.aim = Math.atan2(mouse.y + cam.y - player.y, mouse.x + cam.x - player.x);
+      if (mouse.down) tryShoot(player, player.aim);
+    }
 
     // slowly repair if you hide and don't get hit for 4 seconds
     if (gameTime - player.lastHurt > 4 && player.hp < player.maxHp)
@@ -1080,7 +1123,7 @@ function draw() {
   ctx.fillRect(20, 20, 220 * pct, 18);
   ctx.fillStyle = "#fff"; ctx.font = "bold 14px Arial"; ctx.textAlign = "left";
   ctx.fillText("❤ " + Math.ceil(Math.max(0, player.hp)) + " / " + player.maxHp, 26, 35);
-  ctx.fillText("🎯 " + matchKills + "   🪙 " + matchEarned(), 20, 62);
+  ctx.fillText("🎯 " + matchKills + "   🪙 " + matchEarned() + (matchCoinMult > 1.05 ? "   🔥x" + matchCoinMult.toFixed(1) : ""), 20, 62);
 
   // dash cooldown pip
   const dashReady = player.dashCd <= 0;
@@ -1137,6 +1180,21 @@ function draw() {
     ctx.beginPath(); ctx.arc(mmX + b.x * sx, mmY + b.y * sy, 2.6, 0, 7); ctx.fill();
   }
   if (player.alive) { ctx.fillStyle = "#22d3ee"; ctx.beginPath(); ctx.arc(mmX + player.x * sx, mmY + player.y * sy, 3.2, 0, 7); ctx.fill(); }
+
+  // on-screen thumbsticks (phone)
+  drawStick(moveStick, "#22d3ee");
+  drawStick(aimStick, "#f5a623");
+}
+
+// draws a floating thumbstick where the player is touching
+function drawStick(s, color) {
+  if (!s) return;
+  ctx.globalAlpha = 0.45; ctx.strokeStyle = color; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.arc(s.bx, s.by, 46, 0, 7); ctx.stroke();
+  const ox = s.cx - s.bx, oy = s.cy - s.by, L = Math.hypot(ox, oy) || 1, cl = Math.min(L, 46);
+  ctx.globalAlpha = 0.8; ctx.fillStyle = color;
+  ctx.beginPath(); ctx.arc(s.bx + ox / L * cl, s.by + oy / L * cl, 22, 0, 7); ctx.fill();
+  ctx.globalAlpha = 1;
 }
 
 // ---------- controls ----------
@@ -1151,6 +1209,39 @@ canvas.addEventListener("mousemove", e => { mouse.x = e.clientX; mouse.y = e.cli
 canvas.addEventListener("mousedown", () => mouse.down = true);
 window.addEventListener("mouseup", () => mouse.down = false);
 canvas.addEventListener("contextmenu", e => e.preventDefault());
+
+// ---------- phone touch controls ----------
+// left half of the screen = move stick, right half = aim + fire stick
+const newStick = t => ({ id: t.identifier, bx: t.clientX, by: t.clientY, cx: t.clientX, cy: t.clientY });
+canvas.addEventListener("touchstart", e => {
+  e.preventDefault(); ensureAudio();
+  for (const t of e.changedTouches) {
+    if (t.clientX < innerWidth * 0.5) { if (!moveStick) moveStick = newStick(t); }
+    else if (!aimStick) aimStick = newStick(t);
+  }
+}, { passive: false });
+canvas.addEventListener("touchmove", e => {
+  e.preventDefault();
+  for (const t of e.changedTouches) {
+    if (moveStick && t.identifier === moveStick.id) { moveStick.cx = t.clientX; moveStick.cy = t.clientY; }
+    if (aimStick && t.identifier === aimStick.id) { aimStick.cx = t.clientX; aimStick.cy = t.clientY; }
+  }
+}, { passive: false });
+function endTouch(e) {
+  for (const t of e.changedTouches) {
+    if (moveStick && t.identifier === moveStick.id) moveStick = null;
+    if (aimStick && t.identifier === aimStick.id) aimStick = null;
+  }
+}
+canvas.addEventListener("touchend", endTouch);
+canvas.addEventListener("touchcancel", endTouch);
+
+// on-screen ⚡ dash and ⏸ pause buttons (shown on phones)
+$("btnDash").addEventListener("touchstart", e => { e.preventDefault(); dashPressed = true; ensureAudio(); }, { passive: false });
+$("btnDash").addEventListener("click", () => { dashPressed = true; });
+$("btnPause").addEventListener("touchstart", e => { e.preventDefault(); if (state === "game") paused = !paused; }, { passive: false });
+$("btnPause").onclick = () => { if (state === "game") paused = !paused; };
+if (isTouch) document.body.classList.add("touch");
 
 // dark overlay shown when the game is paused
 function drawPauseOverlay() {
