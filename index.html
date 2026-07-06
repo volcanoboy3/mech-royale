@@ -73,12 +73,36 @@
   #btnMute:hover { border-color: #22d3ee; }
 
   /* on-screen phone buttons (pause + dash) — hidden on desktop */
-  #btnPause { position: fixed; top: 12px; right: 70px; z-index: 6; font-size: 18px;
+  #btnPause { position: fixed; top: 12px; right: 126px; z-index: 6; font-size: 18px;
               background: rgba(35,42,69,0.88); border: 2px solid #3a4266; border-radius: 10px; padding: 6px 12px; cursor: pointer; color:#fff; }
   #btnDash { position: fixed; right: 18px; bottom: 152px; z-index: 6; width: 70px; height: 70px; border-radius: 50%;
              font-size: 28px; background: rgba(34,211,238,0.16); border: 2px solid #22d3ee; color: #eafcff; cursor: pointer; }
   #btnPause, #btnDash { display: none; }
   body.touch #btnPause, body.touch #btnDash { display: block; }
+
+  /* 💬 in-match team chat — the game pauses while you type */
+  #btnChat { position: fixed; top: 12px; right: 70px; z-index: 6; font-size: 18px;
+             background: rgba(35,42,69,0.88); border: 2px solid #3a4266; border-radius: 10px; padding: 6px 12px; cursor: pointer; }
+  #btnChat:hover { border-color: #22d3ee; }
+  #chatPanel { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 9;
+               width: min(94vw, 620px); background: rgba(16,20,42,0.96); border: 2px solid #22d3ee;
+               border-radius: 14px; padding: 12px; }
+  #chatMsgs { font-size: 15px; line-height: 1.6; margin-bottom: 8px; max-height: 130px; overflow-y: auto; text-align: left; }
+  #chatQuick { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+  #chatQuick button { flex: 1; min-width: 100px; font-size: 13px; font-weight: bold; color: #fff; background: #232a45;
+                      border: 2px solid #3a4266; border-radius: 9px; padding: 8px 6px; cursor: pointer; }
+  #chatQuick button:hover { border-color: #22d3ee; }
+  #chatRow { display: flex; gap: 6px; }
+  #chatRow input { flex: 1; font-size: 16px; padding: 9px 12px; border-radius: 10px; border: 2px solid #3a4266;
+                   background: #10142a; color: #fff; }
+  #chatRow input:focus { outline: none; border-color: #22d3ee; }
+  #chatRow .btn { min-width: 0; padding: 8px 14px; font-size: 15px; }
+
+  /* 🎉 confetti when you win */
+  #confettiBox { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+  .confetti { position: absolute; top: -20px; width: 10px; height: 14px; border-radius: 2px;
+              animation: confFall linear forwards; }
+  @keyframes confFall { to { transform: translateY(110vh) rotate(720deg); } }
 
   /* keep menus usable on small phone screens */
   @media (max-width: 560px) {
@@ -194,6 +218,7 @@
 
 <!-- ================= END OF MATCH SCREEN ================= -->
 <div id="endScreen" class="screen hidden" style="background: rgba(8,10,20,0.82);">
+  <div id="confettiBox"></div>
   <h2 id="endTitle">🏆 VICTORY!</h2>
   <div id="endStats" style="font-size:20px; line-height:1.8; text-align:center;"></div>
   <button class="btn big" id="btnAgain">▶ PLAY AGAIN</button>
@@ -203,6 +228,25 @@
 <button id="btnMute">🔊</button>
 <button id="btnPause">⏸</button>
 <button id="btnDash">⚡</button>
+
+<!-- ================= TEAM CHAT (during a match) ================= -->
+<button id="btnChat">💬</button>
+<div id="chatPanel" class="hidden">
+  <div id="chatMsgs"></div>
+  <div id="chatQuick">
+    <button data-say="attack!">⚔️ ATTACK</button>
+    <button data-say="follow me">🚶 FOLLOW ME</button>
+    <button data-say="protect me">🛡️ PROTECT ME</button>
+    <button data-say="spread out">🌐 SPREAD OUT</button>
+    <button data-say="retreat!">🏃 RETREAT</button>
+  </div>
+  <div id="chatRow">
+    <input id="chatInput" type="text" placeholder="type to your team..." autocomplete="off" spellcheck="false" maxlength="60">
+    <button class="btn" id="btnChatSend">SEND</button>
+    <button class="btn" id="btnChatClose">✖</button>
+  </div>
+</div>
+
 <canvas id="game"></canvas>
 
 <script>
@@ -750,6 +794,107 @@ $("btnMute").onclick = () => {
 };
 updateMuteBtn();
 
+// =====================================================================
+//  TEAM CHAT — press 💬 (or T) during a match. The game PAUSES while
+//  you type (nobody can fight you), and teammates DO what you tell them!
+// =====================================================================
+let chatOpen = false, squadOrder = null, chatHinted = false;
+let chatLog = [];
+let powerups = [], powerT = 8;   // fun boost pickups that appear during matches
+
+const escHTML = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+function chatMsg(name, txt, color) {
+  chatLog.push({ name, txt, color, life: 7 });
+  if (chatLog.length > 6) chatLog = chatLog.slice(-6);
+  renderChatMsgs();
+}
+function renderChatMsgs() {
+  $("chatMsgs").innerHTML = chatLog.map(m =>
+    '<div><b style="color:' + m.color + '">' + escHTML(m.name) + ':</b> ' + escHTML(m.txt) + '</div>').join("") ||
+    '<div style="color:#8b93b0">Say something to your team! Orders they understand:<br>ATTACK • FOLLOW • DEFEND • SPREAD • RETREAT</div>';
+}
+function openChat() {
+  if (state !== "game") return;
+  chatOpen = true;
+  for (const k in keys) keys[k] = false;   // stop moving while typing
+  renderChatMsgs();
+  $("chatPanel").classList.remove("hidden");
+  setTimeout(() => { try { $("chatInput").focus(); $("chatInput").value = ""; } catch (e) {} }, 0);
+}
+function closeChat() {
+  chatOpen = false;
+  $("chatPanel").classList.add("hidden");
+  try { $("chatInput").blur(); } catch (e) {}
+  for (const k in keys) keys[k] = false;
+}
+// figure out what order the player is giving (forgiving keyword match)
+function parseOrder(t) {
+  t = t.toLowerCase();
+  if (/attack|charge|kill|fight|shoot|get (them|him|the boss)|go go/.test(t)) return "attack";
+  if (/follow|come|with me|to me|here/.test(t)) return "follow";
+  if (/defend|protect|guard|cover|stay (close|with)/.test(t)) return "defend";
+  if (/spread|split|scatter/.test(t)) return "spread";
+  if (/retreat|fall back|run|hide|flee|back off/.test(t)) return "retreat";
+  return null;
+}
+const ORDER_REPLIES = {
+  attack:  ["⚔️ ATTACKING!", "Let's get them!", "CHARGE!!!"],
+  follow:  ["Right behind you!", "Coming!", "On your six!"],
+  defend:  ["I got your back!", "Nobody touches you!", "Shields up!"],
+  spread:  ["Spreading out!", "Going wide!", "Splitting up!"],
+  retreat: ["Falling back!", "RUN!!!", "Getting out of here!"],
+};
+const MATE_CHAT = ["Got it!", "haha nice", "Let's win this!", "GG so far", "Watch my back!", "🤖 beep boop"];
+const TAUNTS = ["Is that all you got?", "You can't hide from me!", "Target locked: YOU", "hehehe...", "You're going DOWN!", "My toaster aims better!"];
+const CHEERS = ["Nice shot!!", "LET'S GO!", "🔥🔥🔥", "That was awesome!", "MVP right there!"];
+
+function sendChat(raw) {
+  const txt = (raw != null ? raw : $("chatInput").value).trim().slice(0, 60);
+  if (!txt || !player) return;
+  $("chatInput").value = "";
+  chatMsg("YOU", txt, "#22d3ee");
+  player.sayTxt = txt.slice(0, 26); player.sayT = 3;
+  const mates = bots.filter(b => b.alive && b.team === player.team);
+  const order = parseOrder(txt);
+  if (order && mates.length) {
+    squadOrder = order;
+    banner("🫡 Squad order: " + order.toUpperCase() + "!", "#7CFC98");
+    const talkers = [...mates].sort(() => Math.random() - 0.5).slice(0, Math.min(2, mates.length));
+    for (const m of talkers) {
+      const line = ORDER_REPLIES[order][Math.floor(Math.random() * ORDER_REPLIES[order].length)];
+      chatMsg(m.name, line, "#7CFC98");
+      m.sayTxt = line.slice(0, 26); m.sayT = 3.5;
+    }
+  } else if (mates.length) {
+    const m = mates[Math.floor(Math.random() * mates.length)];
+    const line = chatHinted ? MATE_CHAT[Math.floor(Math.random() * MATE_CHAT.length)]
+                            : "Give us orders! Try: ATTACK, FOLLOW, DEFEND, SPREAD or RETREAT";
+    chatHinted = true;
+    chatMsg(m.name, line, "#7CFC98");
+    m.sayTxt = line.slice(0, 26); m.sayT = 3.5;
+  } else {
+    // no teammates (free for all) — a random enemy talks trash instead
+    const foes = bots.filter(b => b.alive);
+    if (foes.length) {
+      const f = foes[Math.floor(Math.random() * foes.length)];
+      const line = TAUNTS[Math.floor(Math.random() * TAUNTS.length)];
+      chatMsg(f.name, line, "#ff9b9b");
+      f.sayTxt = line.slice(0, 26); f.sayT = 3.5;
+    }
+  }
+}
+$("btnChat").onclick = () => { sndClick(); chatOpen ? closeChat() : openChat(); };
+$("btnChatClose").onclick = () => { sndClick(); closeChat(); };
+$("btnChatSend").onclick = () => sendChat();
+$("chatInput").addEventListener("keydown", e => {
+  if (e.key === "Enter") sendChat();
+  if (e.key === "Escape") closeChat();
+  e.stopPropagation();
+});
+document.querySelectorAll("#chatQuick button").forEach(btn => {
+  btn.onclick = () => sendChat(btn.dataset.say);
+});
+
 // ---------- the MECH STORE ----------
 function renderMechStore() {
   refreshLabels();
@@ -926,6 +1071,7 @@ function makeFighter(x, y, mech, gun, isPlayer, name, team) {
            r: 15 + Math.round(mech.hp / 50),        // bigger health = bigger mech
            hp: mech.hp, maxHp: mech.hp, speed: mech.speed,
            cooldown: 0, aim: 0, alive: true, lastHurt: -99, walk: 0, hitFlash: 0, dashCd: 0, dashT: 0,
+           sayTxt: "", sayT: 0, spdT: 0, dmgT: 0, shieldT: 0,
            wx: x, wy: y, wanderT: 0, strafeDir: 1, strafeT: 1, aimErr: 0.14 + Math.random() * 0.18 };
 }
 
@@ -1035,6 +1181,8 @@ function startMatch(cfg) {
   bullets = []; particles = []; floaties = []; banners = [];
   matchKills = 0; bonusCoins = 0; matchOver = false; shake = 0; gameTime = 0; flash = 0;
   streak = 0; lastKillTime = -99; paused = false; hazardT = 2.5;
+  squadOrder = null; chatLog = []; chatHinted = false; closeChat();
+  powerups = []; powerT = 8;
   moveStick = null; aimStick = null; dashPressed = false;
   cam.x = player.x - canvas.width / 2; cam.y = player.y - canvas.height / 2;
   const modeMsg = matchMode === "teams" ? " — " + size + "v" + size + " — wipe out the 🟥 RED team!"
@@ -1066,6 +1214,22 @@ function fireHazard() {
   if (player.alive) beep(180, 0.12, "sawtooth", 0.05, 90);
 }
 
+// 💥 rockets, grenades and the BFG explode and hurt everything nearby
+function explode(bu) {
+  const R = bu.type === "bfg" ? 130 : bu.type === "grenade" ? 95 : 75;
+  for (const f of fighters()) {
+    if (!f.alive) continue;
+    if (bu.owner && (f === bu.owner || f.team === bu.owner.team)) continue;
+    const d = dist(f, bu);
+    if (d < R + f.r) hurt(f, Math.round(bu.dmg * (d < R * 0.5 ? 1 : 0.6)), bu.owner);
+  }
+  for (let i = 0; i < 26; i++) particles.push({
+    x: bu.x, y: bu.y, vx: (Math.random() - 0.5) * 520, vy: (Math.random() - 0.5) * 520,
+    life: 0.5, color: i % 3 ? "#ff7a1f" : "#ffd23f", size: 5,
+  });
+  if (player && dist(bu, player) < 950) { shake = Math.max(shake, 6); beep(70, 0.3, "sawtooth", 0.12, 40); }
+}
+
 // ---------- shooting ----------
 function tryShoot(f, angle) {
   if (f.cooldown > 0 || !f.alive) return;
@@ -1076,7 +1240,8 @@ function tryShoot(f, angle) {
     bullets.push({
       x: f.x + Math.cos(a) * (f.r + 16), y: f.y + Math.sin(a) * (f.r + 16),
       vx: Math.cos(a) * b.speed * 45, vy: Math.sin(a) * b.speed * 45,
-      dmg: gunDamage(f.gun), owner: f, color: RARITIES[f.gun.rarity].color,
+      dmg: Math.round(gunDamage(f.gun) * (f.isPlayer && f.dmgT > 0 ? 2 : 1)),   // 💥 double-damage power-up
+      owner: f, color: RARITIES[f.gun.rarity].color,
       type: f.gun.type, life: f.gun.type === "flame" ? 0.5 : 1.4,   // fire is short-range
     });
   }
@@ -1093,6 +1258,10 @@ function tryShoot(f, angle) {
 
 function hurt(f, dmg, killer) {
   if (!f.alive) return;
+  if (f.isPlayer && f.shieldT > 0) {   // 🛡 shield power-up blocks ALL damage
+    floaty(f.x, f.y - f.r - 12, "BLOCKED 🛡", "#7CFC98");
+    return;
+  }
   f.hp -= dmg;
   f.lastHurt = gameTime;
   f.hitFlash = 0.12;
@@ -1107,11 +1276,24 @@ function hurt(f, dmg, killer) {
     });
     banner("💥 " + (killer ? killer.name + " destroyed " + f.name : f.name + " is destroyed"),
            killer && killer.isPlayer ? "#22c55e" : "#c3c9de");
+    if (f.isPlayer && killer && !killer.isPlayer) {   // the enemy who got you talks trash
+      const line = TAUNTS[Math.floor(Math.random() * TAUNTS.length)];
+      chatMsg(killer.name, line, "#ff9b9b");
+      killer.sayTxt = line.slice(0, 26); killer.sayT = 3.5;
+    }
     if (killer && killer.isPlayer && !f.isPlayer) {
       matchKills++;
       if (f.isBoss) { bonusCoins += killCoins() * 5; floaty(f.x, f.y - 44, "💥 BOSS DOWN! +" + (killCoins() * 6) + " 🪙", "#ffca3a"); }
       else floaty(f.x, f.y - 40, "+" + killCoins() + " 🪙", "#f5c542");
       sndCoin();
+      if (Math.random() < 0.4) {   // sometimes a teammate cheers for you
+        const mates = bots.filter(m => m.alive && m.team === player.team);
+        if (mates.length) {
+          const m = mates[Math.floor(Math.random() * mates.length)];
+          const line = CHEERS[Math.floor(Math.random() * CHEERS.length)];
+          chatMsg(m.name, line, "#7CFC98"); m.sayTxt = line; m.sayT = 3;
+        }
+      }
       // KILL STREAK! two or more quick kills in a row gets a shout-out
       streak = (gameTime - lastKillTime < 4) ? streak + 1 : 1;
       lastKillTime = gameTime;
@@ -1132,6 +1314,33 @@ function updateBot(b, dt) {
     if (d < bestD) { bestD = d; target = f; }
   }
   const canFight = target && bestD < 620 && canSee(b, target);   // only ONE raycast per bot
+
+  // 💬 squad orders — teammates do what YOU told them in the chat
+  if (!b.isPlayer && !b.isBoss && player && player.alive && b.team === player.team && squadOrder) {
+    if (canFight) { b.aim = Math.atan2(target.y - b.y, target.x - b.x) + (Math.random() - 0.5) * b.aimErr; tryShoot(b, b.aim); }
+    const spd = b.speed * 0.8;
+    const march = (tx, ty, stop) => {
+      const d = Math.hypot(tx - b.x, ty - b.y);
+      if (d > stop) { const a = Math.atan2(ty - b.y, tx - b.x); moveFighter(b, Math.cos(a) * spd * dt, Math.sin(a) * spd * dt); if (!canFight) b.aim = a; }
+    };
+    if (squadOrder === "follow")  { march(player.x, player.y, 120); return; }
+    if (squadOrder === "defend")  { march(player.x, player.y, 240); return; }
+    if (squadOrder === "attack" && target) { march(target.x, target.y, 230); return; }
+    if (squadOrder === "retreat") {
+      if (target && bestD < 800) { const a = Math.atan2(b.y - target.y, b.x - target.x); moveFighter(b, Math.cos(a) * spd * dt, Math.sin(a) * spd * dt); }
+      else march(player.x, player.y, 160);
+      return;
+    }
+    if (squadOrder === "spread") {
+      b.wanderT -= dt;
+      if (b.wanderT <= 0 || Math.hypot(b.wx - b.x, b.wy - b.y) < 40) {
+        b.wx = 80 + Math.random() * (WORLD.w - 160); b.wy = 80 + Math.random() * (WORLD.h - 160);
+        b.wanderT = 3 + Math.random() * 3;
+      }
+      march(b.wx, b.wy, 30); return;
+    }
+  }
+
   if (target && bestD < 1150) {
     const a = Math.atan2(target.y - b.y, target.x - b.x);
     // strafe side to side, get closer if far, back off if too close
@@ -1163,6 +1372,7 @@ function endMatch(won, leftEarly) {
   if (matchOver) return;
   matchOver = true;
   state = "end";
+  closeChat();
   try {
     const bonus = playCoins() + (won ? winCoins() : 0);
 
@@ -1186,6 +1396,19 @@ function endMatch(won, leftEarly) {
       "🏅 Rank: " + rankHTML(newRank) + " (🏆 " + (save.wins + (won ? 1 : 0)) + " wins)<br>" +
       "<b style='color:#f5c542'>Total earned: +" + (matchEarned() + bonus) + " 🪙</b>";
     showScreen("endScreen");
+
+    // 🎉 confetti rain when you WIN!
+    const conf = $("confettiBox");
+    conf.innerHTML = "";
+    if (won) for (let i = 0; i < 60; i++) {
+      const d = document.createElement("div");
+      d.className = "confetti";
+      d.style.left = Math.random() * 100 + "%";
+      d.style.background = ["#22d3ee", "#f5c542", "#22c55e", "#ff5b5b", "#a855f7", "#ff8ad1"][i % 6];
+      d.style.animationDuration = (2.5 + Math.random() * 2) + "s";
+      d.style.animationDelay = (Math.random() * 0.8) + "s";
+      conf.appendChild(d);
+    }
 
     // then bank the coins and save
     if (won) { save.wins++; sndFanfare(true); }
@@ -1230,7 +1453,7 @@ function update(dt) {
       beep(320, 0.12, "sine", 0.08, 640);
     }
     dashPressed = false;
-    const spd = player.speed * (player.dashT > 0 ? 3 : 1);
+    const spd = player.speed * (player.dashT > 0 ? 3 : 1) * (player.spdT > 0 ? 1.6 : 1);
     moveFighter(player, dx / m * spd * dt, dy / m * spd * dt);
     if (player.dashT > 0) particles.push({ x: player.x, y: player.y, vx: 0, vy: 0, life: 0.22, color: "#7ef9ff", size: player.r });
 
@@ -1266,6 +1489,29 @@ function update(dt) {
   // health packs come back a few seconds after being used; hit-flashes fade out
   for (const pk of healthPacks) if (pk.taken) { pk.cd -= dt; if (pk.cd <= 0) pk.taken = false; }
   for (const f of fighters()) if (f.hitFlash > 0) f.hitFlash -= dt;
+  for (const f of fighters()) if (f.sayT > 0) f.sayT -= dt;   // speech bubbles fade out
+  for (const c of chatLog) c.life -= dt;
+
+  // ⭐ power-ups appear now and then — grab them for a boost!
+  powerT -= dt;
+  if (powerT <= 0 && powerups.length < 4) {
+    const types = ["speed", "damage", "shield"];
+    powerups.push({ ...findSpot(18, player, 120), type: types[Math.floor(Math.random() * 3)] });
+    powerT = 9 + Math.random() * 7;
+  }
+  if (player.alive) {
+    player.spdT -= dt; player.dmgT -= dt; player.shieldT -= dt;
+    for (let i = powerups.length - 1; i >= 0; i--) {
+      const pu = powerups[i];
+      if (dist(player, pu) < player.r + 18) {
+        if (pu.type === "speed")  { player.spdT = 8;    floaty(pu.x, pu.y - 20, "⚡ SPEED UP!", "#7ef9ff"); }
+        if (pu.type === "damage") { player.dmgT = 8;    floaty(pu.x, pu.y - 20, "💥 DOUBLE DAMAGE!", "#ff7a1f"); }
+        if (pu.type === "shield") { player.shieldT = 5; floaty(pu.x, pu.y - 20, "🛡 SHIELD!", "#7CFC98"); }
+        beep(700, 0.12, "sine", 0.1, 1050);
+        powerups.splice(i, 1);
+      }
+    }
+  }
 
   // --- enemy mechs ---
   for (const b of bots) if (b.alive) updateBot(b, dt);
@@ -1274,6 +1520,7 @@ function update(dt) {
   for (let i = bullets.length - 1; i >= 0; i--) {
     const bu = bullets[i];
     bu.x += bu.vx * dt; bu.y += bu.vy * dt; bu.life -= dt;
+    const explosive = bu.type === "rocket" || bu.type === "grenade" || bu.type === "bfg";
     let dead = bu.life <= 0 || bu.x < 0 || bu.x > WORLD.w || bu.y < 0 || bu.y > WORLD.h;
 
     // bullets stop at blocks — that's why hiding works
@@ -1287,9 +1534,9 @@ function update(dt) {
     }
     if (!dead) for (const f of fighters()) {
       if (!f.alive || f === bu.owner || (bu.owner && f.team === bu.owner.team)) continue;  // no friendly fire
-      if (dist(f, bu) < f.r + 4) { hurt(f, bu.dmg, bu.owner); dead = true; break; }
+      if (dist(f, bu) < f.r + 4) { if (!explosive) hurt(f, bu.dmg, bu.owner); dead = true; break; }
     }
-    if (dead) bullets.splice(i, 1);
+    if (dead) { if (explosive) explode(bu); bullets.splice(i, 1); }
   }
 
   // --- sparkles and popup text ---
@@ -1375,6 +1622,25 @@ function drawMech(f) {
   const pct = Math.max(0, f.hp) / f.maxHp;
   ctx.fillStyle = pct > 0.55 ? "#22c55e" : pct > 0.25 ? "#f5c542" : "#ef4444";
   ctx.fillRect(f.x - 22, f.y - f.r - 14, 44 * pct, 6);
+  // 🛡 shield power-up bubble
+  if (f.isPlayer && f.shieldT > 0) {
+    ctx.strokeStyle = "rgba(124,252,152," + (0.5 + 0.3 * Math.sin(gameTime * 6)).toFixed(2) + ")"; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(f.x, f.y, f.r + 10, 0, 7); ctx.stroke();
+  }
+  // 💬 speech bubble when someone talks
+  if (f.sayT > 0 && f.sayTxt) {
+    ctx.font = "bold 12px Arial";
+    const w = ctx.measureText(f.sayTxt).width + 14;
+    const bx = f.x - w / 2, by = f.y - f.r - 44;
+    ctx.globalAlpha = clamp(f.sayT, 0, 1) * 0.92;
+    ctx.fillStyle = "#fff";
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(bx, by, w, 20, 7); else ctx.rect(bx, by, w, 20);
+    ctx.fill();
+    ctx.fillStyle = "#10142a"; ctx.textAlign = "center";
+    ctx.fillText(f.sayTxt, f.x, by + 14);
+    ctx.globalAlpha = 1;
+  }
 }
 
 // ---------- themed map scenery (drawn under the blocks) ----------
@@ -1542,6 +1808,17 @@ function draw() {
   }
   ctx.globalAlpha = 1;
 
+  // ⭐ power-ups (walk over one for a boost!)
+  for (const pu of powerups) {
+    const bob = Math.sin(gameTime * 3 + pu.x) * 3;
+    const col = pu.type === "speed" ? "#7ef9ff" : pu.type === "damage" ? "#ff7a1f" : "#7CFC98";
+    ctx.fillStyle = "rgba(10,14,28,0.8)";
+    ctx.beginPath(); ctx.arc(pu.x, pu.y + bob, 15, 0, 7); ctx.fill();
+    ctx.strokeStyle = col; ctx.lineWidth = 2.5; ctx.stroke();
+    ctx.font = "14px Arial"; ctx.textAlign = "center"; ctx.fillStyle = col;
+    ctx.fillText(pu.type === "speed" ? "⚡" : pu.type === "damage" ? "💥" : "🛡", pu.x, pu.y + bob + 5);
+  }
+
   // all the mechs
   for (const f of fighters()) if (f.alive) drawMech(f);
 
@@ -1594,6 +1871,13 @@ function draw() {
   ctx.fillStyle = dashReady ? "#04121a" : "#aab2d0"; ctx.font = "bold 10px Arial"; ctx.textAlign = "left";
   ctx.fillText(dashReady ? "⚡ DASH READY (SPACE)" : "⚡ dash…", 26, 82);
 
+  // active power-up timers
+  let puX = 20;
+  ctx.font = "bold 13px Arial"; ctx.textAlign = "left";
+  if (player.spdT > 0)    { ctx.fillStyle = "#7ef9ff"; ctx.fillText("⚡ " + Math.ceil(player.spdT) + "s", puX, 104); puX += 52; }
+  if (player.dmgT > 0)    { ctx.fillStyle = "#ff7a1f"; ctx.fillText("💥 " + Math.ceil(player.dmgT) + "s", puX, 104); puX += 52; }
+  if (player.shieldT > 0) { ctx.fillStyle = "#7CFC98"; ctx.fillText("🛡 " + Math.ceil(player.shieldT) + "s", puX, 104); }
+
   // mechs left (sits below the mute button)
   ctx.textAlign = "right";
   ctx.font = "bold 20px Arial";
@@ -1619,6 +1903,16 @@ function draw() {
     }
   }
 
+  // recent chat messages (bottom-left, above your mech info)
+  ctx.textAlign = "left"; ctx.font = "bold 14px Arial";
+  const recentChat = chatLog.filter(c => c.life > 0).slice(-4);
+  recentChat.forEach((c, i) => {
+    ctx.globalAlpha = clamp(c.life, 0, 1);
+    ctx.fillStyle = c.color;
+    ctx.fillText(c.name + ": " + c.txt, 20, canvas.height - 96 - (recentChat.length - 1 - i) * 20);
+  });
+  ctx.globalAlpha = 1;
+
   // your mech + gun
   ctx.textAlign = "left"; ctx.font = "bold 18px Arial";
   ctx.fillStyle = RARITIES[player.mech.rarity].color;
@@ -1626,7 +1920,7 @@ function draw() {
   ctx.fillStyle = RARITIES[player.gun.rarity].color;
   ctx.fillText(gunLabel(player.gun) + (player.gun.level > 1 ? "  Lv" + player.gun.level : ""), 20, canvas.height - 40);
   ctx.fillStyle = "#aab2d0"; ctx.font = "13px Arial";
-  ctx.fillText(gunDamage(player.gun) + " dmg • " + baseOf(player.gun).rate + " shots/s     SPACE dash • P pause • ESC leave", 20, canvas.height - 20);
+  ctx.fillText(gunDamage(player.gun) + " dmg • " + baseOf(player.gun).rate + " shots/s     SPACE dash • T chat • P pause • ESC leave", 20, canvas.height - 20);
 
   // announcements
   ctx.textAlign = "center";
@@ -1672,9 +1966,14 @@ function drawStick(s, color) {
 
 // ---------- controls ----------
 window.addEventListener("keydown", e => {
+  if (chatOpen) {                        // typing goes to the chat box, not the game
+    if (e.key === "Escape") closeChat();
+    return;
+  }
   keys[e.key.toLowerCase()] = true;
   if (e.key === "Escape" && state === "game") endMatch(false, true);
   if (e.key.toLowerCase() === "p" && state === "game") paused = !paused;
+  if (e.key.toLowerCase() === "t" && state === "game") { e.preventDefault(); openChat(); }
   if (["arrowup", "arrowdown", "arrowleft", "arrowright", " "].includes(e.key.toLowerCase())) e.preventDefault();
 });
 window.addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
@@ -1726,6 +2025,14 @@ function drawPauseOverlay() {
   ctx.fillText("press P to resume", canvas.width / 2, canvas.height / 2 + 34);
 }
 
+// soft overlay while the chat is open (the fight is frozen so nobody can hit you)
+function drawChatOverlay() {
+  ctx.fillStyle = "rgba(8,10,20,0.45)";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = "#22d3ee"; ctx.textAlign = "center"; ctx.font = "bold 26px Arial";
+  ctx.fillText("💬 CHATTING — game paused", canvas.width / 2, 150);
+}
+
 // ---------- the game loop (runs about 60 times per second) ----------
 let lastT = performance.now(), badFrames = 0;
 function tick(now) {
@@ -1735,8 +2042,8 @@ function tick(now) {
   if (state !== "game") return;
   // if one frame breaks, skip it and keep playing — the game must NEVER freeze
   try {
-    if (!paused) update(dt);
-    if (state === "game") { draw(); if (paused) drawPauseOverlay(); }
+    if (!paused && !chatOpen) update(dt);   // chatting freezes the fight — nobody can hit you
+    if (state === "game") { draw(); if (paused) drawPauseOverlay(); if (chatOpen) drawChatOverlay(); }
     badFrames = 0;
   } catch (e) {
     console.error(e);
