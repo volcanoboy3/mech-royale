@@ -733,7 +733,7 @@ const isTouch = ("ontouchstart" in window) || navigator.maxTouchPoints > 0;
 
 const fighters = () => [player, ...bots];
 // more players fighting = more coins! (a multiplier set per match)
-const BASE_KILL = 3, BASE_PLAY = 2, BASE_WIN = 20;
+const BASE_KILL = 6, BASE_PLAY = 4, BASE_WIN = 50;
 let matchCoinMult = 1;
 const killCoins = () => Math.round(BASE_KILL * matchCoinMult);
 const playCoins = () => Math.round(BASE_PLAY * matchCoinMult);
