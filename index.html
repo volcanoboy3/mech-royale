@@ -182,6 +182,7 @@
 <!-- ================= MODE SELECT ================= -->
 <div id="modeScreen" class="screen hidden">
   <h2>⚔️ CHOOSE MODE</h2>
+  <div class="cardList">
   <div class="modeBox">
     <div class="modeTitle">🎯 FREE FOR ALL</div>
     <div class="modeDesc">No teams — everyone for themselves. Last mech standing wins!</div>
@@ -199,6 +200,19 @@
     <div class="modeDesc">Team up with a squad vs ONE GIANT mega-boss with a massive health bar!</div>
     <div class="sliderRow"><input type="range" id="bossSlider" min="1" max="30" value="4"><span id="bossLabel">You + 3 allies</span></div>
     <button class="btn" id="btnPlayBoss">▶ FIGHT BOSSES</button>
+  </div>
+  <div class="modeBox">
+    <div class="modeTitle">🌊 SURVIVAL</div>
+    <div class="modeDesc">You + your squad vs 10 waves that keep getting harder — waves 5 and 10 bring a BOSS!</div>
+    <div class="sliderRow"><input type="range" id="survSlider" min="1" max="30" value="4"><span id="survLabel">You + 3 allies</span></div>
+    <button class="btn" id="btnPlaySurv">▶ SURVIVE THE WAVES</button>
+  </div>
+  <div class="modeBox">
+    <div class="modeTitle">🔫 GUN GAME</div>
+    <div class="modeDesc">Every kill upgrades your gun! Everyone respawns — first to get a kill with ALL 12 guns wins!</div>
+    <div class="sliderRow"><input type="range" id="ggSlider" min="2" max="20" value="6"><span id="ggLabel">6 players</span></div>
+    <button class="btn" id="btnPlayGG">▶ PLAY GUN GAME</button>
+  </div>
   </div>
   <button class="btn" id="btnModeBack">⬅ BACK</button>
 </div>
@@ -665,13 +679,19 @@ function syncModeLabels() {
   const t = +$("teamSlider").value;
   $("teamLabel").textContent = t + " v " + t;
   $("bossLabel").textContent = "You + " + (+$("bossSlider").value - 1) + " allies";
+  $("survLabel").textContent = "You + " + (+$("survSlider").value - 1) + " allies";
+  $("ggLabel").textContent = (+$("ggSlider").value) + " players";
 }
 $("ffaSlider").addEventListener("input", syncModeLabels);
 $("teamSlider").addEventListener("input", syncModeLabels);
 $("bossSlider").addEventListener("input", syncModeLabels);
-$("btnPlayFFA").onclick   = () => { sndClick(); startMatch({ mode: "ffa",   size: +$("ffaSlider").value }); };
-$("btnPlayTeams").onclick = () => { sndClick(); startMatch({ mode: "teams", size: +$("teamSlider").value }); };
-$("btnPlayBoss").onclick  = () => { sndClick(); startMatch({ mode: "boss",  size: +$("bossSlider").value }); };
+$("survSlider").addEventListener("input", syncModeLabels);
+$("ggSlider").addEventListener("input", syncModeLabels);
+$("btnPlayFFA").onclick   = () => { sndClick(); startMatch({ mode: "ffa",      size: +$("ffaSlider").value }); };
+$("btnPlayTeams").onclick = () => { sndClick(); startMatch({ mode: "teams",    size: +$("teamSlider").value }); };
+$("btnPlayBoss").onclick  = () => { sndClick(); startMatch({ mode: "boss",     size: +$("bossSlider").value }); };
+$("btnPlaySurv").onclick  = () => { sndClick(); startMatch({ mode: "survival", size: +$("survSlider").value }); };
+$("btnPlayGG").onclick    = () => { sndClick(); startMatch({ mode: "gungame",  size: +$("ggSlider").value }); };
 $("btnModeBack").onclick  = () => { sndClick(); goMenu(); };
 
 // ---------- map select (30 maps + a random option) ----------
@@ -1071,7 +1091,7 @@ function makeFighter(x, y, mech, gun, isPlayer, name, team) {
            r: 15 + Math.round(mech.hp / 50),        // bigger health = bigger mech
            hp: mech.hp, maxHp: mech.hp, speed: mech.speed,
            cooldown: 0, aim: 0, alive: true, lastHurt: -99, walk: 0, hitFlash: 0, dashCd: 0, dashT: 0,
-           sayTxt: "", sayT: 0, spdT: 0, dmgT: 0, shieldT: 0,
+           sayTxt: "", sayT: 0, spdT: 0, dmgT: 0, shieldT: 0, ladderIdx: 0, respawnT: null,
            wx: x, wy: y, wanderT: 0, strafeDir: 1, strafeT: 1, aimErr: 0.14 + Math.random() * 0.18 };
 }
 
@@ -1095,6 +1115,24 @@ function botGun(boost) {
 // ---------- start a new match ----------
 // mode = "ffa" (everyone solo) or "teams"; size = players per team (teams) or total players (ffa)
 let matchMode = "ffa", matchTeamSize = 0, lastCfg = { mode: "ffa", size: 6 }, difficulty = 0;
+let wave = 0, waveDelay = 0, wavePending = false, gungameWinner = null;
+
+// 🔫 GUN GAME ladder — every kill moves you to the next gun.
+//    Get a kill with the LAST gun and you win the whole match!
+const GUNGAME_LADDER = [
+  { type: "pistol",  rarity: "common" },
+  { type: "smg",     rarity: "common" },
+  { type: "shotgun", rarity: "rare" },
+  { type: "mgun",    rarity: "rare" },
+  { type: "rifle",   rarity: "rare" },
+  { type: "flame",   rarity: "mythic" },
+  { type: "minigun", rarity: "mythic" },
+  { type: "laser",   rarity: "mythic" },
+  { type: "cannon",  rarity: "legendary" },
+  { type: "rocket",  rarity: "legendary" },
+  { type: "rail",    rarity: "legendary" },
+  { type: "bfg",     rarity: "legendary" },
+];
 function botNameFor(i) {
   const base = BOT_NAMES[i % BOT_NAMES.length];
   return i < BOT_NAMES.length ? base : base + (Math.floor(i / BOT_NAMES.length) + 1);
@@ -1102,13 +1140,17 @@ function botNameFor(i) {
 
 function startMatch(cfg) {
   cfg = cfg || lastCfg;
-  matchMode = cfg.mode === "teams" ? "teams" : cfg.mode === "boss" ? "boss" : "ffa";
-  const size = clamp(Math.round(cfg.size) || 6, matchMode === "ffa" ? 2 : 1, 50);
+  const validModes = ["ffa", "teams", "boss", "survival", "gungame"];
+  matchMode = validModes.includes(cfg.mode) ? cfg.mode : "ffa";
+  const size = clamp(Math.round(cfg.size) || 6, (matchMode === "ffa" || matchMode === "gungame") ? 2 : 1, 50);
   matchTeamSize = size;
   lastCfg = { mode: matchMode, size };
   let numBosses = 0;
   if (matchMode === "boss") numBosses = 1;   // ONE big boss!
-  const total = matchMode === "teams" ? size * 2 : matchMode === "boss" ? size + numBosses : size;
+  const total = matchMode === "teams" ? size * 2
+              : matchMode === "boss" ? size + numBosses
+              : matchMode === "survival" ? size + 6   // waves keep coming, so count some extra
+              : size;
   difficulty = rankIndexFor(save.wins);      // higher rank = tougher enemies AND more coins
   // coins scale with BOTH how many mechs are fighting AND your rank
   matchCoinMult = clamp(total / 6, 1, 10) * (1 + difficulty * 0.2);
@@ -1129,8 +1171,8 @@ function startMatch(cfg) {
   const leftReg  = { x0: 60, x1: WORLD.w * 0.4, y0: 60, y1: WORLD.h - 60 };
   const rightReg = { x0: WORLD.w * 0.6, x1: WORLD.w - 60, y0: 60, y1: WORLD.h - 60 };
 
-  // you — team "A" in team/boss mode, or your own solo team in FFA
-  const onTeam = matchMode === "teams" || matchMode === "boss";
+  // you — team "A" in team/boss/survival mode, or your own solo team in FFA
+  const onTeam = matchMode === "teams" || matchMode === "boss" || matchMode === "survival";
   const myMech = MECHS[save.mechEquipped];
   const pr = 15 + Math.round(myMech.hp / 50);
   const pSpot = findSpot(pr, null, 0, onTeam ? leftReg : null);
@@ -1168,9 +1210,13 @@ function startMatch(cfg) {
     b.maxHp = Math.round(m.hp * (14 + difficulty) * (1 + size * 0.4));   // a HUGE health bar
     b.hp = b.maxHp; b.r = br; b.speed *= 0.6; b.aimErr = 0.14;
     bots.push(b);
+  } else if (matchMode === "survival") {
+    for (let i = 0; i < size - 1; i++) addBot("A", leftReg, false);   // your squad — the enemy waves spawn later!
   } else {
     for (let i = 0; i < size - 1; i++) addBot("ffa" + i, null, true); // everyone for themselves (buffed)
   }
+  // GUN GAME: everyone starts on the same first gun and races up the ladder
+  if (matchMode === "gungame") for (const f of fighters()) { f.ladderIdx = 0; f.gun = { ...GUNGAME_LADDER[0], level: 1 }; }
 
   // health packs — more on bigger maps
   healthPacks = [];
@@ -1183,16 +1229,47 @@ function startMatch(cfg) {
   streak = 0; lastKillTime = -99; paused = false; hazardT = 2.5;
   squadOrder = null; chatLog = []; chatHinted = false; closeChat();
   powerups = []; powerT = 8;
+  wave = 0; waveDelay = 1.5; wavePending = false; gungameWinner = null;
   moveStick = null; aimStick = null; dashPressed = false;
   cam.x = player.x - canvas.width / 2; cam.y = player.y - canvas.height / 2;
   const modeMsg = matchMode === "teams" ? " — " + size + "v" + size + " — wipe out the 🟥 RED team!"
                 : matchMode === "boss"  ? " — 👹 BOSS FIGHT — take down the MEGA BOSS with your squad!"
+                : matchMode === "survival" ? " — 🌊 SURVIVAL — outlast all 10 waves!"
+                : matchMode === "gungame" ? " — 🔫 GUN GAME — first to kill with all " + GUNGAME_LADDER.length + " guns wins!"
                 : " — " + size + "-player FREE FOR ALL — GO!";
   banner("🗺️ " + curMap.name + modeMsg, "#22d3ee");
   if (curMap.hazard) banner("⚡ BONUS MAP — watch out, it shoots bullets!", "#ffca3a");
   if (difficulty > 0) banner("☠ Enemies scaled to " + rankOf(save.wins).name + " rank!", "#ff8a8a");
   showScreen(null);
   state = "game";
+}
+
+// 🌊 SURVIVAL: spawns the next wave of enemies (waves 5 and 10 bring a boss!)
+function spawnWave() {
+  bots = bots.filter(b => b.alive || b.team === player.team);   // clear old wrecks
+  const n = Math.min(2 + wave, 14);
+  const boost = Math.min(difficulty + wave - 1, 20);
+  for (let i = 0; i < n; i++) {
+    const m = MECHS[botMechIdx(boost)];
+    const s = findSpot(15 + Math.round(m.hp / 50), player, 600);
+    const b = makeFighter(s.x, s.y, m, botGun(boost), false, botNameFor(bots.length + i), "B");
+    b.maxHp = Math.round(b.maxHp * (1 + wave * 0.1));   // each wave hits harder
+    b.hp = b.maxHp;
+    b.aimErr *= clamp(1 - difficulty * 0.045, 0.35, 1);
+    bots.push(b);
+  }
+  if (wave % 5 === 0) {   // BOSS WAVE!
+    const legs = MECHS.filter(m => m.rarity === "legendary");
+    const m = legs[Math.floor(Math.random() * legs.length)];
+    const s = findSpot(52, player, 700);
+    const b = makeFighter(s.x, s.y, m, { type: "rocket", rarity: "legendary", level: 1 }, false, "👹 WAVE BOSS", "B");
+    b.isBoss = true; b.r = 52;
+    b.maxHp = Math.round(m.hp * (5 + wave)); b.hp = b.maxHp;
+    b.speed *= 0.65; b.aimErr = 0.14;
+    bots.push(b);
+  }
+  banner("🌊 WAVE " + wave + " / 10" + (wave % 5 === 0 ? " — 👹 BOSS WAVE!" : ""), "#7ce0ff");
+  if (player.alive && wave > 1) player.hp = Math.min(player.maxHp, player.hp + player.maxHp * 0.3);   // heal between waves
 }
 
 function banner(txt, color = "#fff") { banners.unshift({ txt, color, life: 3 }); banners = banners.slice(0, 4); }
@@ -1300,6 +1377,23 @@ function hurt(f, dmg, killer) {
       const shout = { 2: "DOUBLE KILL!", 3: "TRIPLE KILL!", 4: "MULTI KILL!", 5: "RAMPAGE!", 6: "UNSTOPPABLE!" };
       if (streak >= 2) { banner("🔥 " + (shout[Math.min(streak, 6)] || "GODLIKE!!!"), "#f5a623"); sndFanfare(true); }
     }
+    // 🔫 GUN GAME: every kill climbs the killer to the next gun; a kill with the LAST gun wins!
+    // (runs AFTER the kill-credit above so the winning kill's coins get banked too.
+    //  No "alive" check — a rocket fired before you died still counts when it lands!)
+    if (matchMode === "gungame") {
+      f.respawnT = 3;   // nobody stays dead in Gun Game
+      if (killer) {
+        killer.ladderIdx = (killer.ladderIdx || 0) + 1;
+        if (killer.ladderIdx >= GUNGAME_LADDER.length) {
+          gungameWinner = killer.name;
+          endMatch(killer.isPlayer);
+        } else {
+          killer.gun = { ...GUNGAME_LADDER[killer.ladderIdx], level: 1 };
+          if (killer.isPlayer) banner("🔫 GUN UP! " + gunLabel(killer.gun) + " (" + (killer.ladderIdx + 1) + "/" + GUNGAME_LADDER.length + ")", "#7ce0ff");
+          else if (killer.ladderIdx >= GUNGAME_LADDER.length - 2) banner("⚠ " + killer.name + " is on gun " + (killer.ladderIdx + 1) + "/" + GUNGAME_LADDER.length + "!", "#ff9b9b");
+        }
+      }
+    }
   }
 }
 
@@ -1341,7 +1435,7 @@ function updateBot(b, dt) {
     }
   }
 
-  if (target && bestD < 1150) {
+  if (target && (bestD < 1150 || (matchMode === "survival" && b.team !== player.team))) {
     const a = Math.atan2(target.y - b.y, target.x - b.x);
     // strafe side to side, get closer if far, back off if too close
     let mx = Math.cos(a + Math.PI / 2 * b.strafeDir), my = Math.sin(a + Math.PI / 2 * b.strafeDir);
@@ -1379,8 +1473,12 @@ function endMatch(won, leftEarly) {
     // show the end screen FIRST — the player must never get stuck on a frozen battlefield
     const place = won ? 1 : bots.filter(b => b.alive).length + 1;
     $("endTitle").textContent = leftEarly ? "🏃 You left the match"
-      : won ? "🏆 VICTORY!"
-      : (matchMode === "teams" ? "💥 DEFEAT — your team lost"
+      : won ? (matchMode === "survival" ? "🏆 YOU SURVIVED ALL 10 WAVES!"
+               : matchMode === "gungame" ? "🏆 GUN GAME CHAMPION!"
+               : "🏆 VICTORY!")
+      : (matchMode === "gungame" && gungameWinner ? "💥 " + gungameWinner + " won the Gun Game"
+         : matchMode === "survival" ? "🌊 You fell on wave " + wave
+         : matchMode === "teams" ? "💥 DEFEAT — your team lost"
          : matchMode === "boss" ? "💥 DEFEAT — the bosses won"
          : "💥 You placed #" + place);
     $("endTitle").style.color = won ? "#f5c542" : "#fff";
@@ -1390,6 +1488,8 @@ function endMatch(won, leftEarly) {
     $("endStats").innerHTML =
       (rankedUp ? "⬆ <b>RANK UP!</b> You are now " + rankHTML(newRank) + "!<br>" : "") +
       (matchCoinMult > 1.05 ? "🔥 Coin bonus: <b>x" + matchCoinMult.toFixed(1) + "</b> (rank + battle size)!<br>" : "") +
+      (matchMode === "survival" ? "🌊 Waves cleared: " + Math.max(0, wave - 1) + " / 10<br>" : "") +
+      (matchMode === "gungame" ? "🔫 Gun ladder: " + Math.min((player.ladderIdx || 0) + 1, GUNGAME_LADDER.length) + " / " + GUNGAME_LADDER.length + "<br>" : "") +
       "🎯 Kills: " + matchKills + " → +" + (matchKills * killCoins()) + " 🪙<br>" +
       "🎮 Played: +" + playCoins() + " 🪙<br>" +
       (won ? "🏆 Win bonus: +" + winCoins() + " 🪙<br>" : "") +
@@ -1565,10 +1665,43 @@ function update(dt) {
   shake = Math.max(0, shake - 30 * dt);
   flash = Math.max(0, flash - dt * 2.5);
 
-  // --- did somebody win? all ENEMIES gone = you win (teammates don't count) ---
-  const enemyAlive = bots.some(b => b.alive && b.team !== player.team);
-  if (!enemyAlive) endMatch(true);
-  else if (!player.alive) endMatch(false);
+  // --- did somebody win? (each mode ends its own way) ---
+  if (matchMode === "gungame") {
+    // nobody stays dead in GUN GAME — everyone respawns after 3 seconds
+    for (const f of fighters()) if (!f.alive && f.respawnT != null) {
+      f.respawnT -= dt;
+      if (f.respawnT <= 0) {
+        const s = findSpot(f.r, player.alive ? player : null, 400);
+        f.x = s.x; f.y = s.y; f.hp = f.maxHp; f.alive = true; f.respawnT = null; f.hitFlash = 0;
+        if (f.isPlayer) banner("🔁 Respawned — keep climbing!", "#7ce0ff");
+      }
+    }
+  } else if (matchMode === "survival") {
+    // the moment the arena is cleared the wave counts as BEATEN —
+    // even if you trade your life for the last enemy, you keep the win!
+    const enemiesLeft = bots.some(b => b.alive && b.team !== player.team);
+    if (!enemiesLeft && !wavePending) {
+      if (wave > 0) {   // bonus coins for clearing the wave
+        const bonus = Math.round(12 * wave * matchCoinMult);
+        bonusCoins += bonus;
+        floaty(player.x, player.y - 44, "🌊 wave clear +" + bonus + " 🪙", "#7ce0ff");
+        sndCoin();
+      }
+      wave++;
+      if (wave > 10) { endMatch(true); return; }
+      wavePending = true;
+      waveDelay = wave === 1 ? 1.5 : 3;   // short breather, then the next wave arrives
+    }
+    if (wavePending) {
+      waveDelay -= dt;
+      if (waveDelay <= 0) { wavePending = false; spawnWave(); }
+    }
+    if (!player.alive) endMatch(false);
+  } else {
+    const enemyAlive = bots.some(b => b.alive && b.team !== player.team);
+    if (!enemyAlive) endMatch(true);
+    else if (!player.alive) endMatch(false);
+  }
 }
 
 // ---------- drawing a mech (feet, body, shoulder pods, cockpit, gun) ----------
@@ -1886,6 +2019,11 @@ function draw() {
     const myAlive = fighters().filter(f => f.alive && f.team === player.team).length;
     const foeAlive = fighters().filter(f => f.alive && f.team !== player.team).length;
     ctx.fillText("🟦 " + myAlive + "  vs  " + (matchMode === "boss" ? "👹 " : "🟥 ") + foeAlive, canvas.width - 20, 84);
+  } else if (matchMode === "survival") {
+    const foeAlive = fighters().filter(f => f.alive && f.team !== player.team).length;
+    ctx.fillText("🌊 WAVE " + Math.max(1, wave) + "/10 — 👾 " + foeAlive + " left", canvas.width - 20, 84);
+  } else if (matchMode === "gungame") {
+    ctx.fillText("🔫 GUN " + Math.min((player.ladderIdx || 0) + 1, GUNGAME_LADDER.length) + " / " + GUNGAME_LADDER.length, canvas.width - 20, 84);
   } else {
     const alive = fighters().filter(f => f.alive).length;
     ctx.fillText("🤖 " + alive + " LEFT", canvas.width - 20, 84);
