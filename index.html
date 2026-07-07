@@ -1159,7 +1159,24 @@ function resize() { canvas.width = innerWidth; canvas.height = innerHeight; }
 window.addEventListener("resize", resize); resize();
 
 const WORLD = { w: 2000, h: 1300 };
-const BOT_NAMES = ["Blaze", "ShadowX", "NoScope99", "Pickle", "DragonSlayer", "Sweaty Sam", "TacoTruck", "Zoomer"];
+// 120 bot names — enough for a full 50v50 so nobody needs a number stuck on
+const BOT_NAMES = [
+  "Blaze", "ShadowX", "NoScope99", "Pickle", "DragonSlayer", "Sweaty Sam", "TacoTruck", "Zoomer",
+  "Venom", "Frostbite", "Turbo", "NightOwl", "Rocketman", "BigChungus", "LagSpike", "PixelPete",
+  "Glitchy", "ToastyBoi", "MegaMike", "SneakySnake", "Wolfie", "IronFist", "Cheeto", "Nugget",
+  "CaptainZap", "DoomDuck", "SirLagsalot", "Waffles", "NinjaNate", "EpicEel", "Thunderbolt", "Moose",
+  "Grizzly", "CactusJack", "BubbleTea", "DankDave", "PotatoKing", "RoboRex", "Chomper", "Slick",
+  "Fuzzy", "Blitz", "Comet", "Vortex", "Rascal", "Bandit", "Maverick", "Ghosty",
+  "Spooky", "ZippyZane", "Crunchwrap", "Meatball", "Noodle", "SoggyCereal", "Butterbean", "HotdogHank",
+  "FunkyMonkey", "Gizmo", "Sprocket", "Widget", "Doodle", "Scooter", "RocketRick", "TornadoTim",
+  "Lazerbeam", "Snickerdoodle", "Jellybean", "Gumball", "Pretzel", "Biscuit", "Chippy", "Salsa",
+  "Quesadilla", "BurritoBob", "Nacho", "Churro", "DiscoDan", "FunkMaster", "BeatBox", "YeetMachine",
+  "SlamDunk", "Speedy", "FlashFred", "Bolt", "Zoomies", "TurboSnail", "SlowMo", "Chonk",
+  "BigBrain", "ProfessorBoom", "DrDanger", "MrMayhem", "SirBoomsalot", "LadyLaser", "QueenBee", "KingCobra",
+  "DukeBoom", "BaronBlitz", "WizardWes", "MageMarv", "TankTina", "SniperSue", "CamperCarl", "RusherRon",
+  "ClutchClaire", "AceAmy", "NoobNed", "TryhardTy", "VictoryVic", "ChampChad", "PogFrog", "HypeTrain",
+  "MemeLord", "KittyKat", "PandaPunch", "SlothSlam", "TigerTail", "BearHug", "SharkBite", "SquidSquad",
+];
 
 let player, bots = [], blocks = [], bullets = [], particles = [], floaties = [], banners = [], healthPacks = [];
 let cam = { x: 0, y: 0 }, shake = 0, gameTime = 0, flash = 0, paused = false;
@@ -1266,9 +1283,15 @@ const GUNGAME_LADDER = [
   { type: "rail",    rarity: "legendary" },
   { type: "bfg",     rarity: "legendary" },
 ];
-function botNameFor(i) {
-  const base = BOT_NAMES[i % BOT_NAMES.length];
-  return i < BOT_NAMES.length ? base : base + (Math.floor(i / BOT_NAMES.length) + 1);
+// names get dealt like a deck of cards — every bot gets its OWN name, no "Blaze2"
+let nameDeck = [];
+function botNameFor() {
+  if (!nameDeck.length) {
+    const used = new Set(bots.filter(b => b.alive).map(b => b.name));   // don't repeat a living bot's name
+    nameDeck = BOT_NAMES.filter(n => !used.has(n)).sort(() => Math.random() - 0.5);
+    if (!nameDeck.length) nameDeck = [...BOT_NAMES].sort(() => Math.random() - 0.5);
+  }
+  return nameDeck.pop();
 }
 
 function startMatch(cfg) {
@@ -1370,6 +1393,7 @@ function startMatch(cfg) {
   powerups = []; powerT = 8;
   wave = 0; waveDelay = 1.5; wavePending = false; gungameWinner = null;
   towerChoosing = false; $("towerPanel").classList.add("hidden");
+  nameDeck = [];   // fresh shuffle of bot names every match
   moveStick = null; aimStick = null; dashPressed = false;
   cam.x = player.x - canvas.width / 2; cam.y = player.y - canvas.height / 2;
   const modeMsg = matchMode === "teams" ? " — " + size + "v" + size + " — wipe out the 🟥 RED team!"
