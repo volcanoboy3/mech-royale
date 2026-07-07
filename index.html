@@ -98,6 +98,14 @@
   #chatRow input:focus { outline: none; border-color: #22d3ee; }
   #chatRow .btn { min-width: 0; padding: 8px 14px; font-size: 15px; }
 
+  /* 🗼 tower climb: the pick-a-power panel after each boss */
+  #towerPanel { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 9;
+                width: min(94vw, 480px); background: rgba(16,20,42,0.97); border: 2px solid #f5a623;
+                border-radius: 16px; padding: 22px; display: flex; flex-direction: column; gap: 10px;
+                text-align: center; }
+  .towerTitle { font-size: 19px; font-weight: bold; color: #f5c542; line-height: 1.5; margin-bottom: 6px; }
+  #towerPanel .btn { min-width: 0; }
+
   /* 🎉 confetti when you win */
   #confettiBox { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
   .confetti { position: absolute; top: -20px; width: 10px; height: 14px; border-radius: 2px;
@@ -213,6 +221,11 @@
     <div class="sliderRow"><input type="range" id="ggSlider" min="2" max="20" value="6"><span id="ggLabel">6 players</span></div>
     <button class="btn" id="btnPlayGG">▶ PLAY GUN GAME</button>
   </div>
+  <div class="modeBox">
+    <div class="modeTitle">🗼 TOWER CLIMB</div>
+    <div class="modeDesc">Climb ALONE, floor by floor — each floor has more enemies. Every 10th floor is a BOSS that drops a forever-power: damage, defense, or health!</div>
+    <button class="btn" id="btnPlayTower">▶ CLIMB THE TOWER</button>
+  </div>
   </div>
   <button class="btn" id="btnModeBack">⬅ BACK</button>
 </div>
@@ -259,6 +272,14 @@
     <button class="btn" id="btnChatSend">SEND</button>
     <button class="btn" id="btnChatClose">✖</button>
   </div>
+</div>
+
+<!-- ================= TOWER CLIMB: pick a power after each boss ================= -->
+<div id="towerPanel" class="hidden">
+  <div class="towerTitle">👹 BOSS BEATEN!<br>Pick a power for the rest of your climb:</div>
+  <button class="btn" id="twDmg">⚔️ +25% DAMAGE forever</button>
+  <button class="btn" id="twDef">🛡️ TAKE 20% LESS DAMAGE forever</button>
+  <button class="btn" id="twHp">❤️ +40 MAX HEALTH (and heal it now)</button>
 </div>
 
 <canvas id="game"></canvas>
@@ -692,6 +713,7 @@ $("btnPlayTeams").onclick = () => { sndClick(); startMatch({ mode: "teams",    s
 $("btnPlayBoss").onclick  = () => { sndClick(); startMatch({ mode: "boss",     size: +$("bossSlider").value }); };
 $("btnPlaySurv").onclick  = () => { sndClick(); startMatch({ mode: "survival", size: +$("survSlider").value }); };
 $("btnPlayGG").onclick    = () => { sndClick(); startMatch({ mode: "gungame",  size: +$("ggSlider").value }); };
+$("btnPlayTower").onclick = () => { sndClick(); startMatch({ mode: "tower",    size: 1 }); };
 $("btnModeBack").onclick  = () => { sndClick(); goMenu(); };
 
 // ---------- map select (30 maps + a random option) ----------
@@ -1116,6 +1138,7 @@ function botGun(boost) {
 // mode = "ffa" (everyone solo) or "teams"; size = players per team (teams) or total players (ffa)
 let matchMode = "ffa", matchTeamSize = 0, lastCfg = { mode: "ffa", size: 6 }, difficulty = 0;
 let wave = 0, waveDelay = 0, wavePending = false, gungameWinner = null;
+let towerChoosing = false;   // 🗼 true while you're picking a boss power (game frozen)
 
 // 🔫 GUN GAME ladder — every kill moves you to the next gun.
 //    Get a kill with the LAST gun and you win the whole match!
@@ -1140,9 +1163,10 @@ function botNameFor(i) {
 
 function startMatch(cfg) {
   cfg = cfg || lastCfg;
-  const validModes = ["ffa", "teams", "boss", "survival", "gungame"];
+  const validModes = ["ffa", "teams", "boss", "survival", "gungame", "tower"];
   matchMode = validModes.includes(cfg.mode) ? cfg.mode : "ffa";
-  const size = clamp(Math.round(cfg.size) || 6, (matchMode === "ffa" || matchMode === "gungame") ? 2 : 1, 50);
+  const size = matchMode === "tower" ? 1   // the tower is a SOLO climb
+             : clamp(Math.round(cfg.size) || 6, (matchMode === "ffa" || matchMode === "gungame") ? 2 : 1, 50);
   matchTeamSize = size;
   lastCfg = { mode: matchMode, size };
   let numBosses = 0;
@@ -1150,6 +1174,7 @@ function startMatch(cfg) {
   const total = matchMode === "teams" ? size * 2
               : matchMode === "boss" ? size + numBosses
               : matchMode === "survival" ? size + 6   // waves keep coming, so count some extra
+              : matchMode === "tower" ? 6
               : size;
   difficulty = rankIndexFor(save.wins);      // higher rank = tougher enemies AND more coins
   // coins scale with BOTH how many mechs are fighting AND your rank
@@ -1212,6 +1237,9 @@ function startMatch(cfg) {
     bots.push(b);
   } else if (matchMode === "survival") {
     for (let i = 0; i < size - 1; i++) addBot("A", leftReg, false);   // your squad — the enemy waves spawn later!
+  } else if (matchMode === "tower") {
+    // solo climb — the floor's enemies arrive through nextFloor()
+    player.towerDmg = 1; player.towerDef = 1;
   } else {
     for (let i = 0; i < size - 1; i++) addBot("ffa" + i, null, true); // everyone for themselves (buffed)
   }
@@ -1230,12 +1258,14 @@ function startMatch(cfg) {
   squadOrder = null; chatLog = []; chatHinted = false; closeChat();
   powerups = []; powerT = 8;
   wave = 0; waveDelay = 1.5; wavePending = false; gungameWinner = null;
+  towerChoosing = false; $("towerPanel").classList.add("hidden");
   moveStick = null; aimStick = null; dashPressed = false;
   cam.x = player.x - canvas.width / 2; cam.y = player.y - canvas.height / 2;
   const modeMsg = matchMode === "teams" ? " — " + size + "v" + size + " — wipe out the 🟥 RED team!"
                 : matchMode === "boss"  ? " — 👹 BOSS FIGHT — take down the MEGA BOSS with your squad!"
                 : matchMode === "survival" ? " — 🌊 SURVIVAL — outlast all 10 waves!"
                 : matchMode === "gungame" ? " — 🔫 GUN GAME — first to kill with all " + GUNGAME_LADDER.length + " guns wins!"
+                : matchMode === "tower" ? " — 🗼 TOWER CLIMB — how high can you get?"
                 : " — " + size + "-player FREE FOR ALL — GO!";
   banner("🗺️ " + curMap.name + modeMsg, "#22d3ee");
   if (curMap.hazard) banner("⚡ BONUS MAP — watch out, it shoots bullets!", "#ffca3a");
@@ -1271,6 +1301,67 @@ function spawnWave() {
   banner("🌊 WAVE " + wave + " / 10" + (wave % 5 === 0 ? " — 👹 BOSS WAVE!" : ""), "#7ce0ff");
   if (player.alive && wave > 1) player.hp = Math.min(player.maxHp, player.hp + player.maxHp * 0.3);   // heal between waves
 }
+
+// 🗼 TOWER CLIMB: builds the next floor — fresh arena, fresh healing,
+//    more enemies each floor, and a BOSS (2x health, same damage) every 10th floor.
+function nextFloor() {
+  if (save.mapIdx < 0) curMap = MAPS[Math.floor(Math.random() * MAPS.length)];   // random map each floor
+  blocks = genBlocks(curMap.layout, WORLD.w, WORLD.h, 26);
+  decor = genDecor(WORLD.w, WORLD.h);
+  bullets = []; bots = []; powerups = [];
+
+  // you start the floor at a fresh spot, patched up a bit
+  const s = findSpot(player.r);
+  player.x = s.x; player.y = s.y;
+  player.hp = Math.min(player.maxHp, player.hp + player.maxHp * 0.35);
+  cam.x = player.x - canvas.width / 2; cam.y = player.y - canvas.height / 2;
+
+  // every floor gets ALL the healing stuff back
+  healthPacks = [];
+  for (let i = 0; i < 5; i++) healthPacks.push({ ...findSpot(20, player, 140), taken: false, cd: 0 });
+
+  const isBossFloor = wave % 10 === 0;
+  const boost = Math.min(difficulty + Math.floor(wave / 2), 20);
+  if (isBossFloor) {
+    // the floor BOSS: not that hard — 2x health but the SAME damage
+    const m = MECHS[botMechIdx(boost)];
+    const bs = findSpot(40, player, 500);
+    const b = makeFighter(bs.x, bs.y, m, botGun(boost), false, "👹 FLOOR " + wave + " BOSS", "B");
+    b.isBoss = true; b.r = 40;
+    b.maxHp = Math.round(m.hp * (1 + wave * 0.08) * 2);
+    b.hp = b.maxHp; b.speed *= 0.85;
+    bots.push(b);
+  } else {
+    const n = Math.min(wave, 8);   // the floor number = how many enemies (up to 8)
+    for (let i = 0; i < n; i++) {
+      const m = MECHS[botMechIdx(boost)];
+      const sp = findSpot(15 + Math.round(m.hp / 50), player, 450);
+      const b = makeFighter(sp.x, sp.y, m, botGun(boost), false, botNameFor(i), "B");
+      b.maxHp = Math.round(b.maxHp * (1 + wave * 0.08));   // every floor hits harder
+      b.hp = b.maxHp;
+      b.aimErr *= clamp(1 - difficulty * 0.045, 0.35, 1);
+      bots.push(b);
+    }
+  }
+  banner("🗼 FLOOR " + wave + (isBossFloor ? " — 👹 BOSS FLOOR!" : ""), "#f5c542");
+}
+
+// after each tower boss you pick ONE power that lasts the whole climb
+function showTowerChoice() {
+  towerChoosing = true;
+  $("towerPanel").classList.remove("hidden");
+}
+function pickTowerPower(kind) {
+  if (kind === "dmg") { player.towerDmg = (player.towerDmg || 1) * 1.25; banner("⚔️ +25% damage for the rest of the climb!", "#ff9b6b"); }
+  if (kind === "def") { player.towerDef = (player.towerDef || 1) * 0.8;  banner("🛡️ You now take 20% less damage!", "#7CFC98"); }
+  if (kind === "hp")  { player.maxHp += 40; player.hp = Math.min(player.maxHp, player.hp + 40); banner("❤️ +40 max health!", "#ff8a8a"); }
+  sndFanfare(true);
+  towerChoosing = false;
+  $("towerPanel").classList.add("hidden");
+}
+$("twDmg").onclick = () => pickTowerPower("dmg");
+$("twDef").onclick = () => pickTowerPower("def");
+$("twHp").onclick  = () => pickTowerPower("hp");
 
 function banner(txt, color = "#fff") { banners.unshift({ txt, color, life: 3 }); banners = banners.slice(0, 4); }
 function floaty(x, y, txt, color = "#fff") { floaties.push({ x, y, txt, color, life: 1 }); }
@@ -1317,7 +1408,7 @@ function tryShoot(f, angle) {
     bullets.push({
       x: f.x + Math.cos(a) * (f.r + 16), y: f.y + Math.sin(a) * (f.r + 16),
       vx: Math.cos(a) * b.speed * 45, vy: Math.sin(a) * b.speed * 45,
-      dmg: Math.round(gunDamage(f.gun) * (f.isPlayer && f.dmgT > 0 ? 2 : 1)),   // 💥 double-damage power-up
+      dmg: Math.round(gunDamage(f.gun) * (f.isPlayer && f.dmgT > 0 ? 2 : 1) * (f.towerDmg || 1)),   // 💥 power-up + 🗼 tower powers
       owner: f, color: RARITIES[f.gun.rarity].color,
       type: f.gun.type, life: f.gun.type === "flame" ? 0.5 : 1.4,   // fire is short-range
     });
@@ -1339,6 +1430,7 @@ function hurt(f, dmg, killer) {
     floaty(f.x, f.y - f.r - 12, "BLOCKED 🛡", "#7CFC98");
     return;
   }
+  if (f.isPlayer && f.towerDef) dmg = Math.round(dmg * f.towerDef);   // 🗼 tower defense power
   f.hp -= dmg;
   f.lastHurt = gameTime;
   f.hitFlash = 0.12;
@@ -1435,7 +1527,7 @@ function updateBot(b, dt) {
     }
   }
 
-  if (target && (bestD < 1150 || (matchMode === "survival" && b.team !== player.team))) {
+  if (target && (bestD < 1150 || ((matchMode === "survival" || matchMode === "tower") && b.team !== player.team))) {
     const a = Math.atan2(target.y - b.y, target.x - b.x);
     // strafe side to side, get closer if far, back off if too close
     let mx = Math.cos(a + Math.PI / 2 * b.strafeDir), my = Math.sin(a + Math.PI / 2 * b.strafeDir);
@@ -1467,6 +1559,7 @@ function endMatch(won, leftEarly) {
   matchOver = true;
   state = "end";
   closeChat();
+  towerChoosing = false; $("towerPanel").classList.add("hidden");
   try {
     const bonus = playCoins() + (won ? winCoins() : 0);
 
@@ -1475,9 +1568,11 @@ function endMatch(won, leftEarly) {
     $("endTitle").textContent = leftEarly ? "🏃 You left the match"
       : won ? (matchMode === "survival" ? "🏆 YOU SURVIVED ALL 10 WAVES!"
                : matchMode === "gungame" ? "🏆 GUN GAME CHAMPION!"
+               : matchMode === "tower" ? "🏆 EPIC CLIMB — floor " + wave + "!"
                : "🏆 VICTORY!")
       : (matchMode === "gungame" && gungameWinner ? "💥 " + gungameWinner + " won the Gun Game"
          : matchMode === "survival" ? "🌊 You fell on wave " + wave
+         : matchMode === "tower" ? "🗼 You reached floor " + wave
          : matchMode === "teams" ? "💥 DEFEAT — your team lost"
          : matchMode === "boss" ? "💥 DEFEAT — the bosses won"
          : "💥 You placed #" + place);
@@ -1490,6 +1585,7 @@ function endMatch(won, leftEarly) {
       (matchCoinMult > 1.05 ? "🔥 Coin bonus: <b>x" + matchCoinMult.toFixed(1) + "</b> (rank + battle size)!<br>" : "") +
       (matchMode === "survival" ? "🌊 Waves cleared: " + Math.max(0, wave - 1) + " / 10<br>" : "") +
       (matchMode === "gungame" ? "🔫 Gun ladder: " + Math.min((player.ladderIdx || 0) + 1, GUNGAME_LADDER.length) + " / " + GUNGAME_LADDER.length + "<br>" : "") +
+      (matchMode === "tower" ? "🗼 Floors cleared: " + Math.max(0, wave - 1) + "<br>" : "") +
       "🎯 Kills: " + matchKills + " → +" + (matchKills * killCoins()) + " 🪙<br>" +
       "🎮 Played: +" + playCoins() + " 🪙<br>" +
       (won ? "🏆 Win bonus: +" + winCoins() + " 🪙<br>" : "") +
@@ -1697,6 +1793,26 @@ function update(dt) {
       if (waveDelay <= 0) { wavePending = false; spawnWave(); }
     }
     if (!player.alive) endMatch(false);
+  } else if (matchMode === "tower") {
+    // 🗼 floor cleared? bank it right away, then climb to the next one
+    const enemiesLeft = bots.some(b => b.alive && b.team !== player.team);
+    if (!enemiesLeft && !wavePending) {
+      if (wave > 0) {
+        const bonus = Math.round(15 * wave * matchCoinMult);
+        bonusCoins += bonus;
+        floaty(player.x, player.y - 44, "🗼 floor clear +" + bonus + " 🪙", "#f5c542");
+        sndCoin();
+        if (wave % 10 === 0) showTowerChoice();   // boss beaten → pick a power!
+      }
+      wave++;
+      wavePending = true;
+      waveDelay = 1.2;
+    }
+    if (wavePending) {
+      waveDelay -= dt;
+      if (waveDelay <= 0) { wavePending = false; nextFloor(); }
+    }
+    if (!player.alive) endMatch(wave > 10);   // getting past the first boss counts as a WIN
   } else {
     const enemyAlive = bots.some(b => b.alive && b.team !== player.team);
     if (!enemyAlive) endMatch(true);
@@ -2024,6 +2140,9 @@ function draw() {
     ctx.fillText("🌊 WAVE " + Math.max(1, wave) + "/10 — 👾 " + foeAlive + " left", canvas.width - 20, 84);
   } else if (matchMode === "gungame") {
     ctx.fillText("🔫 GUN " + Math.min((player.ladderIdx || 0) + 1, GUNGAME_LADDER.length) + " / " + GUNGAME_LADDER.length, canvas.width - 20, 84);
+  } else if (matchMode === "tower") {
+    const foes = fighters().filter(f => f.alive && f.team !== player.team).length;
+    ctx.fillText("🗼 FLOOR " + Math.max(1, wave) + " — 👾 " + foes, canvas.width - 20, 84);
   } else {
     const alive = fighters().filter(f => f.alive).length;
     ctx.fillText("🤖 " + alive + " LEFT", canvas.width - 20, 84);
@@ -2180,8 +2299,13 @@ function tick(now) {
   if (state !== "game") return;
   // if one frame breaks, skip it and keep playing — the game must NEVER freeze
   try {
-    if (!paused && !chatOpen) update(dt);   // chatting freezes the fight — nobody can hit you
-    if (state === "game") { draw(); if (paused) drawPauseOverlay(); if (chatOpen) drawChatOverlay(); }
+    if (!paused && !chatOpen && !towerChoosing) update(dt);   // chatting / picking a power freezes the fight
+    if (state === "game") {
+      draw();
+      if (paused) drawPauseOverlay();
+      if (chatOpen) drawChatOverlay();
+      if (towerChoosing) { ctx.fillStyle = "rgba(8,10,20,0.55)"; ctx.fillRect(0, 0, canvas.width, canvas.height); }
+    }
     badFrames = 0;
   } catch (e) {
     console.error(e);
