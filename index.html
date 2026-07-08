@@ -119,8 +119,10 @@
               background: rgba(35,42,69,0.88); border: 2px solid #3a4266; border-radius: 10px; padding: 6px 12px; cursor: pointer; color:#fff; }
   #btnDash { position: fixed; right: 18px; bottom: 152px; z-index: 6; width: 70px; height: 70px; border-radius: 50%;
              font-size: 28px; background: rgba(34,211,238,0.16); border: 2px solid #22d3ee; color: #eafcff; cursor: pointer; }
-  #btnPause, #btnDash { display: none; }
-  body.touch #btnPause, body.touch #btnDash { display: block; }
+  #btnSuper { position: fixed; right: 96px; bottom: 152px; z-index: 6; width: 70px; height: 70px; border-radius: 50%;
+              font-size: 28px; background: rgba(245,197,66,0.18); border: 2px solid #f5c542; color: #fff; cursor: pointer; }
+  #btnPause, #btnDash, #btnSuper { display: none; }
+  body.touch #btnPause, body.touch #btnDash, body.touch #btnSuper { display: block; }
 
   /* 💬 in-match team chat — the game pauses while you type */
   #btnChat { position: fixed; top: 12px; right: 70px; z-index: 6; font-size: 18px;
@@ -200,6 +202,7 @@
   <button class="btn big" id="btnPlay">▶ PLAY</button>
   <button class="btn" id="btnMechs">🤖 MECH STORE</button>
   <button class="btn" id="btnGuns">🔫 GUN STORE</button>
+  <button class="btn" id="btnPets">🐾 PETS</button>
   <button class="btn" id="btnPacks">💎 BUY PACKS</button>
   <button class="btn" id="btnMaps">🗺️ MAPS</button>
   <button class="btn" id="btnRanks">🎖️ RANKS</button>
@@ -224,6 +227,14 @@
   <div class="statsRow"><span id="gunCoins">🪙 0</span></div>
   <div id="gunList" class="cardList"></div>
   <button class="btn" id="btnGunBack">⬅ BACK</button>
+</div>
+
+<!-- ================= PETS ================= -->
+<div id="petsScreen" class="screen hidden">
+  <h2>🐾 PETS</h2>
+  <div class="statsRow"><span id="petCoins">🪙 0</span></div>
+  <div id="petList" class="cardList"></div>
+  <button class="btn" id="btnPetsBack">⬅ BACK</button>
 </div>
 
 <!-- ================= PACKS (real-money shop — coming soon) ================= -->
@@ -326,6 +337,7 @@
 <button id="btnMute">🔊</button>
 <button id="btnPause">⏸</button>
 <button id="btnDash">⚡</button>
+<button id="btnSuper">🌟</button>
 <div id="achToast"></div>
 
 <!-- ================= THE REALLY SECRET PASSWORD (hidden on the "M") ================= -->
@@ -819,7 +831,7 @@ function freshSave() {
            gunsOwned: { pistol_common: 1 }, gunEquipped: "pistol_common",
            codesUsed: {}, mapIdx: 0,
            stats: { kills: 0, matches: 0, bossKills: 0, bestFloor: 0, coinsEarned: 0, timePlayed: 0 },
-           ach: {} };
+           ach: {}, petsOwned: [], petEquipped: "none" };
 }
 let save;
 try { save = JSON.parse(localStorage.getItem(SAVE_KEY)); } catch (e) { save = null; }
@@ -828,6 +840,8 @@ if (!save.codesUsed) save.codesUsed = {};   // remembers which secret codes you 
 if (save.mapIdx == null) save.mapIdx = 0;   // which map you picked (-1 = random each match)
 if (!save.stats) save.stats = { kills: 0, matches: 0, bossKills: 0, bestFloor: 0, coinsEarned: 0, timePlayed: 0 };
 if (!save.ach) save.ach = {};               // your unlocked achievements
+if (!save.petsOwned) save.petsOwned = [];   // 🐾 pets you've bought
+if (save.petEquipped == null) save.petEquipped = "none";
 function persist() {
   // saving can fail in some browsers (private mode etc.) — never crash the game for it
   try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) {}
@@ -941,7 +955,7 @@ function sndFanfare(big) {
 let state = "menu";   // "menu" or "game" or "end"
 
 function showScreen(id) {
-  ["menu", "mechStore", "gunStore", "packsScreen", "mapScreen", "modeScreen", "codesScreen", "ranksScreen", "awardsScreen", "endScreen"].forEach(s => $(s).classList.add("hidden"));
+  ["menu", "mechStore", "gunStore", "petsScreen", "packsScreen", "mapScreen", "modeScreen", "codesScreen", "ranksScreen", "awardsScreen", "endScreen"].forEach(s => $(s).classList.add("hidden"));
   if (id) $(id).classList.remove("hidden");
 }
 function refreshLabels() {
@@ -950,8 +964,10 @@ function refreshLabels() {
   $("mechCoins").textContent = "🪙 " + save.coins;
   $("gunCoins").textContent  = "🪙 " + save.coins;
   const g = equippedGun();
+  const sup = superForMech(save.mechEquipped);
   $("loadoutLine").textContent = "🤖 " + MECHS[save.mechEquipped].name + " • 🔫 " + gunLabel(g) +
-                                 (g.level > 1 ? " Lv" + g.level : "");
+                                 (g.level > 1 ? " Lv" + g.level : "") + " • " + sup.emoji + " " + sup.name +
+                                 (save.petEquipped !== "none" ? " • " + petDef(save.petEquipped).emoji : "");
   // rank line: current rank + how many wins to the next one
   const ri = rankIndexFor(save.wins), rk = RANKS[ri], next = RANKS[ri + 1];
   $("rankLine").innerHTML = "Rank: " + rankHTML(rk) +
@@ -1091,6 +1107,46 @@ function renderPacks() {
 }
 $("btnPacks").onclick = () => { sndClick(); renderPacks(); showScreen("packsScreen"); };
 $("btnPacksBack").onclick = () => { sndClick(); goMenu(); };
+
+// ---------- 🐾 the PETS store: buy a pet, equip one to fight with you ----------
+function renderPets() {
+  refreshLabels();
+  $("petCoins").textContent = "🪙 " + save.coins;
+  const list = $("petList");
+  list.innerHTML = "";
+  for (const p of PETS) {
+    const owned = p.id === "none" || save.petsOwned.includes(p.id);
+    const equipped = save.petEquipped === p.id;
+    const card = document.createElement("div");
+    card.className = "card" + (equipped ? " equipped" : "");
+    card.style.borderColor = equipped ? "#22c55e" : "#3a4266";
+    card.innerHTML =
+      '<div class="cardName">' + p.emoji + " " + p.name + '</div>' +
+      '<div class="cardStats">' + p.desc + '</div>' +
+      '<div class="row"></div>';
+    const row = card.querySelector(".row");
+    if (equipped) {
+      row.innerHTML = '<div class="equippedTag">✔ EQUIPPED</div>';
+    } else if (owned) {
+      const eq = document.createElement("button");
+      eq.className = "btn"; eq.textContent = "EQUIP";
+      eq.onclick = () => { sndClick(); save.petEquipped = p.id; persist(); renderPets(); };
+      row.appendChild(eq);
+    } else {
+      const buy = document.createElement("button");
+      buy.className = "btn"; buy.textContent = "BUY — " + p.price + " 🪙";
+      buy.disabled = save.coins < p.price;
+      buy.onclick = () => {
+        save.coins -= p.price; save.petsOwned.push(p.id); save.petEquipped = p.id;
+        persist(); sndFanfare(true); renderPets();
+      };
+      row.appendChild(buy);
+    }
+    list.appendChild(card);
+  }
+}
+$("btnPets").onclick = () => { sndClick(); renderPets(); showScreen("petsScreen"); };
+$("btnPetsBack").onclick = () => { sndClick(); goMenu(); };
 
 // =====================================================================
 //  🔒 THE REALLY REALLY SECRET BUTTON — click the "M" of MECH ROYALE.
@@ -1724,12 +1780,64 @@ function findSpot(r, awayFrom = null, minDist = 0, region = null) {
   return { x: (R.x0 + R.x1) / 2, y: (R.y0 + R.y1) / 2 };
 }
 
+// =====================================================================
+//  ⚡ SUPER ABILITIES — every mech has one. It charges up over time and
+//  from kills; when it's full, press E (or the ⚡ button) to unleash it!
+// =====================================================================
+const SUPERS = [
+  { id: "shield",    emoji: "🛡️", name: "Force Shield" },
+  { id: "heal",      emoji: "❤️", name: "Repair Burst" },
+  { id: "overdrive", emoji: "⚡", name: "Overdrive" },
+  { id: "blast",     emoji: "💥", name: "Shockwave" },
+  { id: "freeze",    emoji: "❄️", name: "Freeze Ray" },
+  { id: "nuke",      emoji: "☢️", name: "Mega Nuke" },
+];
+function superForMech(idx) { return SUPERS[((idx % SUPERS.length) + SUPERS.length) % SUPERS.length]; }
+
+// =====================================================================
+//  🐾 PETS — buy a drone or an animal that fights alongside you!
+// =====================================================================
+const PETS = [
+  { id: "none",   emoji: "🚫", name: "No Pet",       price: 0,     kind: "none",   desc: "No pet equipped" },
+  { id: "drone",  emoji: "🛸", name: "Attack Drone", price: 3000,  kind: "attack", range: 430, rate: 0.9, dmg: 14, desc: "Shoots nearby enemies" },
+  { id: "dog",    emoji: "🐕", name: "Guard Dog",    price: 7000,  kind: "attack", range: 300, rate: 0.45, dmg: 8, desc: "Rapid-fire loyal pup" },
+  { id: "healer", emoji: "➕", name: "Heal Bot",     price: 14000, kind: "heal",   heal: 8,  desc: "Heals you over time" },
+  { id: "cat",    emoji: "🐱", name: "Shield Cat",   price: 20000, kind: "shield", def: 0.8,  desc: "You take 20% less damage" },
+  { id: "pig",    emoji: "🐷", name: "Coin Pig",     price: 28000, kind: "coin",   mult: 1.6, desc: "+60% coins from kills" },
+  { id: "hawk",   emoji: "🦅", name: "Battle Hawk",  price: 55000, kind: "attack", range: 580, rate: 1.3, dmg: 36, desc: "Sniper bird — big hits" },
+];
+const petDef = id => PETS.find(p => p.id === id) || PETS[0];
+let pet = null;   // the pet entity that follows you in a match
+
+function activateSuper() {
+  if (!player || !player.alive || player.superChg < 1) return;
+  player.superChg = 0;
+  const s = SUPERS.find(x => x.id === player.superId) || SUPERS[0];
+  banner("⚡ SUPER: " + s.emoji + " " + s.name + "!", "#22d3ee");
+  shake = Math.max(shake, 9); flash = Math.max(flash, 0.5);
+  beep(300, 0.25, "sawtooth", 0.1, 900);
+  const foes = () => bots.filter(b => b.alive && b.team !== player.team);
+  if (s.id === "shield") { player.shieldT = 4.5; }
+  else if (s.id === "heal") { player.hp = player.maxHp; floaty(player.x, player.y - 40, "FULL HP ❤️", "#22c55e"); }
+  else if (s.id === "overdrive") { player.spdT = 6; player.superFire = 6; floaty(player.x, player.y - 40, "OVERDRIVE ⚡", "#7ef9ff"); }
+  else if (s.id === "blast") { for (const f of foes()) if (dist(f, player) < 340) hurt(f, Math.round(55 + player.maxHp * 0.25), player); }
+  else if (s.id === "freeze") { for (const f of foes()) if (dist(f, player) < 480) f.frozenT = 3.5; }
+  else if (s.id === "nuke") { for (const f of foes()) hurt(f, Math.round(80 + player.maxHp * 0.45), player); flash = 1; }
+  // big burst of ability sparks
+  const col = { shield: "#7CFC98", heal: "#22c55e", overdrive: "#7ef9ff", blast: "#ff7a1f", freeze: "#8ee6ff", nuke: "#ffd23f" }[s.id];
+  for (let i = 0; i < 28; i++) particles.push({
+    x: player.x, y: player.y, vx: (Math.random() - 0.5) * 600, vy: (Math.random() - 0.5) * 600,
+    life: 0.6, color: i % 3 ? col : "#fff", size: 5,
+  });
+}
+
 function makeFighter(x, y, mech, gun, isPlayer, name, team) {
   return { x, y, mech, gun, isPlayer, name, team,
            r: 15 + Math.round(mech.hp / 50),        // bigger health = bigger mech
            hp: mech.hp, maxHp: mech.hp, speed: mech.speed,
            cooldown: 0, aim: 0, alive: true, lastHurt: -99, walk: 0, hitFlash: 0, dashCd: 0, dashT: 0,
            sayTxt: "", sayT: 0, spdT: 0, dmgT: 0, shieldT: 0, ladderIdx: 0, respawnT: null,
+           superChg: 0, superFire: 0, frozenT: 0,
            wx: x, wy: y, wanderT: 0, strafeDir: 1, strafeT: 1, aimErr: 0.14 + Math.random() * 0.18 };
 }
 
@@ -1825,6 +1933,8 @@ function startMatch(cfg) {
   const pr = 15 + Math.round(myMech.hp / 50);
   const pSpot = findSpot(pr, null, 0, onTeam ? leftReg : null);
   player = makeFighter(pSpot.x, pSpot.y, myMech, equippedGun(), true, "YOU", onTeam ? "A" : "you");
+  player.superId = superForMech(save.mechEquipped).id;   // your mech's signature super
+  pet = (save.petEquipped && save.petEquipped !== "none") ? { p: petDef(save.petEquipped), x: pSpot.x, y: pSpot.y, cd: 0 } : null;
 
   // the other mechs. Enemies get tougher the higher your rank is.
   bots = [];
@@ -2028,7 +2138,7 @@ function explode(bu) {
 function tryShoot(f, angle) {
   if (f.cooldown > 0 || !f.alive) return;
   const b = baseOf(f.gun);
-  f.cooldown = 1 / b.rate;
+  f.cooldown = (1 / b.rate) * (f.isPlayer && f.superFire > 0 ? 0.35 : 1);   // ⚡ Overdrive = super fast fire
   for (let i = 0; i < b.pellets; i++) {
     const a = angle + (Math.random() - 0.5) * 2 * b.spread;
     bullets.push({
@@ -2057,6 +2167,7 @@ function hurt(f, dmg, killer) {
     return;
   }
   if (f.isPlayer && f.towerDef) dmg = Math.round(dmg * f.towerDef);   // 🗼 tower defense power
+  if (f.isPlayer && pet && pet.p.kind === "shield") dmg = Math.round(dmg * pet.p.def);   // 🐱 Shield Cat
   f.hp -= dmg;
   f.lastHurt = gameTime;
   f.hitFlash = 0.12;
@@ -2079,10 +2190,12 @@ function hurt(f, dmg, killer) {
     if (killer && killer.isPlayer && !f.isPlayer) {
       matchKills++;
       save.stats.kills++;
+      killer.superChg = Math.min(1, killer.superChg + (f.isBoss ? 0.5 : 0.2));   // ⚡ kills charge your super
       if (f.isBoss) { save.stats.bossKills++; ach("bossSlayer"); }
       checkMeta();   // kill-count achievements unlock instantly
       if (f.isBoss) { bonusCoins += killCoins() * 5; floaty(f.x, f.y - 44, "💥 BOSS DOWN! +" + (killCoins() * 6) + " 🪙", "#ffca3a"); }
       else floaty(f.x, f.y - 40, "+" + killCoins() + " 🪙", "#f5c542");
+      if (pet && pet.p.kind === "coin") bonusCoins += Math.round(killCoins() * (pet.p.mult - 1));   // 🐷 Coin Pig
       sndCoin();
       if (Math.random() < 0.4) {   // sometimes a teammate cheers for you
         const mates = bots.filter(m => m.alive && m.team === player.team);
@@ -2122,6 +2235,7 @@ function hurt(f, dmg, killer) {
 // ---------- bot brain (hunts the nearest ENEMY; leaves teammates alone) ----------
 function updateBot(b, dt) {
   b.cooldown -= dt;
+  if (b.frozenT > 0) { b.frozenT -= dt; b.hitFlash = 0.1; return; }   // ❄️ frozen — can't move or shoot
   // nearest enemy by distance — cheap, no line-of-sight yet (keeps big battles fast)
   let target = null, bestD = Infinity;
   for (const f of fighters()) {
@@ -2282,7 +2396,8 @@ function update(dt) {
 
   // --- you ---
   if (player.alive) {
-    player.dashCd -= dt; player.dashT -= dt;
+    player.dashCd -= dt; player.dashT -= dt; player.superFire -= dt;
+    player.superChg = Math.min(1, player.superChg + dt / 22);   // super slowly charges up
     let dx = (keys.d || keys.arrowright ? 1 : 0) - (keys.a || keys.arrowleft ? 1 : 0);
     let dy = (keys.s || keys.arrowdown ? 1 : 0) - (keys.w || keys.arrowup ? 1 : 0);
     // phone: the left thumbstick overrides WASD
@@ -2354,6 +2469,26 @@ function update(dt) {
         if (pu.type === "shield") { player.shieldT = 5; floaty(pu.x, pu.y - 20, "🛡 SHIELD!", "#7CFC98"); }
         beep(700, 0.12, "sine", 0.1, 1050);
         powerups.splice(i, 1);
+      }
+    }
+  }
+
+  // --- 🐾 your pet ---
+  if (pet && player.alive) {
+    pet.x += (player.x - 40 - pet.x) * 0.1;
+    pet.y += (player.y - 34 - pet.y) * 0.1;
+    const d = pet.p;
+    if (d.kind === "heal" && player.hp < player.maxHp) player.hp = Math.min(player.maxHp, player.hp + d.heal * dt);
+    if (d.kind === "attack") {
+      pet.cd -= dt;
+      if (pet.cd <= 0) {
+        let t = null, bd = d.range;
+        for (const f of bots) if (f.alive && f.team !== player.team) { const dd = dist(pet, f); if (dd < bd) { bd = dd; t = f; } }
+        if (t) {
+          pet.cd = d.rate;
+          const a = Math.atan2(t.y - pet.y, t.x - pet.x);
+          bullets.push({ x: pet.x, y: pet.y, vx: Math.cos(a) * 13 * 45, vy: Math.sin(a) * 13 * 45, dmg: d.dmg, owner: player, color: "#7ef9ff", type: "laser", life: 1.3 });
+        }
       }
     }
   }
@@ -2492,6 +2627,12 @@ function drawMech(f) {
   if (f.hitFlash > 0) {
     ctx.globalAlpha = Math.min(1, f.hitFlash * 6);
     ctx.fillStyle = "#fff";
+    ctx.fillRect(-f.r * 0.8, -f.r * 0.7, f.r * 1.6, f.r * 1.4);
+    ctx.globalAlpha = 1;
+  }
+  // ❄️ frozen tint
+  if (f.frozenT > 0) {
+    ctx.globalAlpha = 0.5; ctx.fillStyle = "#8ee6ff";
     ctx.fillRect(-f.r * 0.8, -f.r * 0.7, f.r * 1.6, f.r * 1.4);
     ctx.globalAlpha = 1;
   }
@@ -2725,6 +2866,16 @@ function draw() {
   // all the mechs
   for (const f of fighters()) if (f.alive) drawMech(f);
 
+  // 🐾 your pet floating beside you
+  if (pet && player.alive) {
+    const by = Math.sin(gameTime * 4) * 3;
+    ctx.fillStyle = "rgba(10,14,28,0.65)";
+    ctx.beginPath(); ctx.arc(pet.x, pet.y + by, 15, 0, 7); ctx.fill();
+    ctx.strokeStyle = "#22d3ee"; ctx.lineWidth = 2; ctx.stroke();
+    ctx.font = "19px Arial"; ctx.textAlign = "center";
+    ctx.fillText(pet.p.emoji, pet.x, pet.y + by + 6);
+  }
+
   drawDecorFloats();   // bubbles / snow / embers / stars over the top
 
   // sparkles
@@ -2774,12 +2925,21 @@ function draw() {
   ctx.fillStyle = dashReady ? "#04121a" : "#aab2d0"; ctx.font = "bold 10px Arial"; ctx.textAlign = "left";
   ctx.fillText(dashReady ? "⚡ DASH READY (SPACE)" : "⚡ dash…", 26, 82);
 
+  // super ability charge bar
+  const sup = SUPERS.find(x => x.id === player.superId) || SUPERS[0];
+  const superReady = player.superChg >= 1;
+  ctx.fillStyle = "rgba(0,0,0,0.5)"; ctx.fillRect(20, 88, 150, 14);
+  ctx.fillStyle = superReady ? "#f5c542" : "#5a4a8a";
+  ctx.fillRect(20, 88, 150 * clamp(player.superChg, 0, 1), 14);
+  ctx.fillStyle = superReady ? "#1a1200" : "#c9bfe6"; ctx.font = "bold 10px Arial"; ctx.textAlign = "left";
+  ctx.fillText(superReady ? sup.emoji + " " + sup.name.toUpperCase() + " READY (E)!" : sup.emoji + " super " + Math.floor(player.superChg * 100) + "%", 26, 98);
+
   // active power-up timers
-  let puX = 20;
+  let puX = 20; const puY = 118;
   ctx.font = "bold 13px Arial"; ctx.textAlign = "left";
-  if (player.spdT > 0)    { ctx.fillStyle = "#7ef9ff"; ctx.fillText("⚡ " + Math.ceil(player.spdT) + "s", puX, 104); puX += 52; }
-  if (player.dmgT > 0)    { ctx.fillStyle = "#ff7a1f"; ctx.fillText("💥 " + Math.ceil(player.dmgT) + "s", puX, 104); puX += 52; }
-  if (player.shieldT > 0) { ctx.fillStyle = "#7CFC98"; ctx.fillText("🛡 " + Math.ceil(player.shieldT) + "s", puX, 104); }
+  if (player.spdT > 0)    { ctx.fillStyle = "#7ef9ff"; ctx.fillText("⚡ " + Math.ceil(player.spdT) + "s", puX, puY); puX += 52; }
+  if (player.dmgT > 0)    { ctx.fillStyle = "#ff7a1f"; ctx.fillText("💥 " + Math.ceil(player.dmgT) + "s", puX, puY); puX += 52; }
+  if (player.shieldT > 0) { ctx.fillStyle = "#7CFC98"; ctx.fillText("🛡 " + Math.ceil(player.shieldT) + "s", puX, puY); }
 
   // mechs left (sits below the mute button)
   ctx.textAlign = "right";
@@ -2831,7 +2991,7 @@ function draw() {
   ctx.fillStyle = RARITIES[player.gun.rarity].color;
   ctx.fillText(gunLabel(player.gun) + (player.gun.level > 1 ? "  Lv" + player.gun.level : ""), 20, canvas.height - 40);
   ctx.fillStyle = "#aab2d0"; ctx.font = "13px Arial";
-  ctx.fillText(gunDamage(player.gun) + " dmg • " + baseOf(player.gun).rate + " shots/s     SPACE dash • T chat • P pause • ESC leave", 20, canvas.height - 20);
+  ctx.fillText(gunDamage(player.gun) + " dmg • " + baseOf(player.gun).rate + " shots/s     SPACE dash • E super • T chat • P pause • ESC leave", 20, canvas.height - 20);
 
   // announcements
   ctx.textAlign = "center";
@@ -2884,6 +3044,7 @@ window.addEventListener("keydown", e => {
   keys[e.key.toLowerCase()] = true;
   if (e.key === "Escape" && state === "game") endMatch(false, true);
   if (e.key.toLowerCase() === "p" && state === "game") paused = !paused;
+  if (e.key.toLowerCase() === "e" && state === "game") { e.preventDefault(); activateSuper(); }
   if (e.key.toLowerCase() === "t" && state === "game") { e.preventDefault(); openChat(); }
   if (["arrowup", "arrowdown", "arrowleft", "arrowright", " "].includes(e.key.toLowerCase())) e.preventDefault();
 });
@@ -2924,6 +3085,8 @@ $("btnDash").addEventListener("touchstart", e => { e.preventDefault(); dashPress
 $("btnDash").addEventListener("click", () => { dashPressed = true; });
 $("btnPause").addEventListener("touchstart", e => { e.preventDefault(); if (state === "game") paused = !paused; }, { passive: false });
 $("btnPause").onclick = () => { if (state === "game") paused = !paused; };
+$("btnSuper").addEventListener("touchstart", e => { e.preventDefault(); activateSuper(); ensureAudio(); }, { passive: false });
+$("btnSuper").addEventListener("click", () => activateSuper());
 if (isTouch) document.body.classList.add("touch");
 
 // ---------- animated menu background: drifting stars + glowing orbs ----------
