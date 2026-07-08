@@ -56,6 +56,6 @@ The 💎 PACKS shop is fully built — only the payment account is missing:
 3. For each Stripe Payment Link, set the **confirmation page message** to show that pack's redemption code ("Your pack code: MRP-…").
 4. Paste the 5 Payment Link URLs into `PAY_CONFIG` in `index.html` and redeploy.
 
-Flow: BUY opens the Stripe page → buyer pays → sees their code → types it in 🔑 SECRET CODES → the pack's exact contents are granted (one-time per save). Note: this code-based delivery is simple and fine for a small game, but codes can be shared — bulletproof delivery would need a small server with Stripe webhooks.
+Flow: BUY opens the Stripe page → buyer pays → sees their code → types it in 🔑 SECRET CODES → the pack's contents are granted. Packs are repeatable: pay again to get the pack again (coins stack; already-owned mechs/guns aren't duplicated).
 
 Made with ❤️ and vanilla JavaScript + HTML canvas.

@@ -1316,20 +1316,14 @@ function redeemCode(raw) {
   const code = (raw || "").trim().toUpperCase();
   const msg = $("codeMsg");
   if (!code) return;
-  // 💳 pack redemption codes (given after a real purchase) — one time each
+  // 💳 pack redemption code (given after a real purchase). You can use it
+  //    again every time you buy the pack again — pay again = get it again.
   if (PACK_CODES[code]) {
-    if (save.codesUsed[code]) {
-      msg.textContent = "⚠ That pack code was already used";
-      msg.style.color = "#f5c542";
-      sndClick();
-    } else {
-      save.codesUsed[code] = true;
-      grantPack(PACK_CODES[code]);
-      const pk = PACKS.find(p => p.id === PACK_CODES[code]);
-      msg.textContent = "📦 " + (pk ? pk.name : "Pack") + " unlocked! Enjoy!";
-      msg.style.color = "#22c55e";
-      sndFanfare(true);
-    }
+    grantPack(PACK_CODES[code]);
+    const pk = PACKS.find(p => p.id === PACK_CODES[code]);
+    msg.textContent = "📦 " + (pk ? pk.name : "Pack") + " unlocked! Enjoy!";
+    msg.style.color = "#22c55e";
+    sndFanfare(true);
     $("codeInput").value = "";
     return;
   }
