@@ -373,7 +373,8 @@
   </div>
   <div class="modeBox">
     <div class="modeTitle">🗼 TOWER CLIMB</div>
-    <div class="modeDesc">Climb ALONE, floor by floor — each floor has more enemies. Every 10th floor is a BOSS that drops a forever-power: damage, defense, or health!</div>
+    <div class="modeDesc">Climb floor by floor — each one has more enemies. Every 10th floor is a BOSS that drops a forever-power! Go solo, or bring 1–3 helpers who climb with you.</div>
+    <div class="sliderRow"><input type="range" id="towerSlider" min="0" max="3" value="0"><span id="towerLabel">Solo (just you)</span></div>
     <button class="btn" id="btnPlayTower">▶ CLIMB THE TOWER</button>
   </div>
   <div class="modeBox">
@@ -1449,6 +1450,8 @@ function syncModeLabels() {
   $("ggLabel").textContent = (+$("ggSlider").value) + " players";
   const c = +$("ctfSlider").value;
   $("ctfLabel").textContent = c + " v " + c;
+  const tw = +$("towerSlider").value;
+  $("towerLabel").textContent = tw === 0 ? "Solo (just you)" : "You + " + tw + " helper" + (tw > 1 ? "s" : "");
 }
 $("ffaSlider").addEventListener("input", syncModeLabels);
 $("teamSlider").addEventListener("input", syncModeLabels);
@@ -1456,12 +1459,13 @@ $("bossSlider").addEventListener("input", syncModeLabels);
 $("survSlider").addEventListener("input", syncModeLabels);
 $("ggSlider").addEventListener("input", syncModeLabels);
 $("ctfSlider").addEventListener("input", syncModeLabels);
+$("towerSlider").addEventListener("input", syncModeLabels);
 $("btnPlayFFA").onclick   = () => { sndClick(); startMatch({ mode: "ffa",      size: +$("ffaSlider").value }); };
 $("btnPlayTeams").onclick = () => { sndClick(); startMatch({ mode: "teams",    size: +$("teamSlider").value }); };
 $("btnPlayBoss").onclick  = () => { sndClick(); startMatch({ mode: "boss",     size: +$("bossSlider").value }); };
 $("btnPlaySurv").onclick  = () => { sndClick(); startMatch({ mode: "survival", size: +$("survSlider").value }); };
 $("btnPlayGG").onclick    = () => { sndClick(); startMatch({ mode: "gungame",  size: +$("ggSlider").value }); };
-$("btnPlayTower").onclick = () => { sndClick(); startMatch({ mode: "tower",    size: 1 }); };
+$("btnPlayTower").onclick = () => { sndClick(); startMatch({ mode: "tower",    size: (+$("towerSlider").value) + 1 }); };
 $("btnPlayZombie").onclick = () => { sndClick(); startMatch({ mode: "zombie",   size: 1 }); };
 $("btnPlayRush").onclick   = () => { sndClick(); startMatch({ mode: "bossrush", size: 1 }); };
 $("btnPlayCTF").onclick    = () => { sndClick(); startMatch({ mode: "ctf",      size: +$("ctfSlider").value }); };
@@ -2018,6 +2022,7 @@ function botGun(boost) {
 let matchMode = "ffa", matchTeamSize = 0, lastCfg = { mode: "ffa", size: 6 }, difficulty = 0, matchTotal = 0;
 let wave = 0, waveDelay = 0, wavePending = false, gungameWinner = null;
 let flags = [], ctfScore = { A: 0, B: 0 }, ctfTarget = 3;   // 🚩 Capture the Flag state
+let towerHelpers = [];   // 🤝 your Tower Climb squad (remembered so they climb every floor with you)
 let towerChoosing = false;   // 🗼 true while you're picking a boss power (game frozen)
 
 // 🔫 GUN GAME ladder — every kill moves you to the next gun.
@@ -2051,8 +2056,8 @@ function startMatch(cfg) {
   cfg = cfg || lastCfg;
   const validModes = ["ffa", "teams", "boss", "survival", "gungame", "tower", "zombie", "bossrush", "ctf"];
   matchMode = validModes.includes(cfg.mode) ? cfg.mode : "ffa";
-  const solo = matchMode === "tower" || matchMode === "zombie" || matchMode === "bossrush";
-  const size = solo ? 1   // the tower / zombie / boss-rush are SOLO
+  const solo = matchMode === "zombie" || matchMode === "bossrush";   // zombie / boss-rush are always SOLO
+  const size = solo ? 1
              : clamp(Math.round(cfg.size) || 6, (matchMode === "ffa" || matchMode === "gungame") ? 2 : 1, 50);
   matchTeamSize = size;
   lastCfg = { mode: matchMode, size };
@@ -2132,8 +2137,15 @@ function startMatch(cfg) {
   } else if (matchMode === "survival") {
     for (let i = 0; i < size - 1; i++) addBot("A", leftReg, false);   // your squad — the enemy waves spawn later!
   } else if (matchMode === "tower") {
-    // solo climb — the floor's enemies arrive through nextFloor()
+    // solo OR co-op climb — the floor's enemies arrive through nextFloor()
     player.towerDmg = 1; player.towerDef = 1;
+    // 🤝 build your helper squad (0–3 friends) and remember them for every floor
+    towerHelpers = [];
+    for (let i = 0; i < size - 1; i++) {
+      const m = MECHS[botMechIdx(0)];
+      towerHelpers.push({ mech: m, gun: botGun(0), name: botNameFor(idx++) });
+    }
+    spawnTowerHelpers();   // put them on floor 1
   } else if (matchMode === "zombie") {
     // 🧟 solo — the endless horde arrives through spawnZombieWave()
   } else if (matchMode === "bossrush") {
@@ -2215,6 +2227,17 @@ function spawnWave() {
   if (player.alive && wave > 1) player.hp = Math.min(player.maxHp, player.hp + player.maxHp * 0.3);   // heal between waves
 }
 
+// 🤝 (re)spawn your Tower helper squad next to you — they revive fresh on every floor
+function spawnTowerHelpers() {
+  for (const h of towerHelpers) {
+    const r = 15 + Math.round(h.mech.hp / 50);
+    const reg = { x0: Math.max(40, player.x - 260), x1: Math.min(WORLD.w - 40, player.x + 260),
+                  y0: Math.max(40, player.y - 260), y1: Math.min(WORLD.h - 40, player.y + 260) };
+    const s = findSpot(r, null, 0, reg);
+    bots.push(makeFighter(s.x, s.y, h.mech, h.gun, false, h.name, player.team));   // same team as YOU
+  }
+}
+
 // 🗼 TOWER CLIMB: builds the next floor — fresh arena, fresh healing,
 //    more enemies each floor, and a BOSS (2x health, same damage) every 10th floor.
 function nextFloor() {
@@ -2229,6 +2252,8 @@ function nextFloor() {
   player.x = s.x; player.y = s.y;
   player.hp = Math.min(player.maxHp, player.hp + player.maxHp * 0.35);
   cam.x = player.x - canvas.width / 2; cam.y = player.y - canvas.height / 2;
+
+  spawnTowerHelpers();   // 🤝 your squad climbs with you, revived fresh each floor
 
   // every floor gets ALL the healing stuff back
   healthPacks = [];
