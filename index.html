@@ -1047,22 +1047,30 @@ function updateAdBtn() {
 }
 setInterval(() => { if (adCooldown > 0) { adCooldown = Math.max(0, adCooldown - 1); updateAdBtn(); } }, 1000);
 
-function watchAd(coins, reward) {
+// plays a (pretend) ad for 5 seconds, then runs onDone. Swap the pretend
+// part for a real ad company's call to earn money.
+let adPlaying = false;
+function playAd(msg, endLabel, onDone) {
+  if (adPlaying) { if (onDone) onDone(); return; }   // never stack two ads
+  adPlaying = true;
   ensureAudio();
-  const ov = $("adOverlay"), art = $("adArt"), msg = $("adMsg"), timer = $("adTimer");
+  const ov = $("adOverlay"), art = $("adArt"), m = $("adMsg"), timer = $("adTimer");
   const arts = ["🤖", "🎮", "🍕", "🚀", "🦖", "⚽", "🎧", "🐱", "🍔", "🎸", "🛸", "🐶"];
   ov.classList.remove("hidden");
-  msg.textContent = "Watch to earn " + coins + " coins!";
+  m.textContent = msg;
   let t = 5;
-  timer.textContent = "Ad ends in " + t + "…";
+  timer.textContent = endLabel + " " + t + "…";
   beep(440, 0.1, "square", 0.05);
   const iv = setInterval(() => {
     art.textContent = arts[Math.floor(Math.random() * arts.length)];
     t--;
-    if (t > 0) timer.textContent = "Ad ends in " + t + "…";
-    else { clearInterval(iv); ov.classList.add("hidden"); reward(); }
+    if (t > 0) timer.textContent = endLabel + " " + t + "…";
+    else { clearInterval(iv); ov.classList.add("hidden"); adPlaying = false; if (onDone) onDone(); }
   }, 1000);
 }
+function watchAd(coins, reward) { playAd("Watch to earn " + coins + " coins!", "Ad ends in", reward); }
+// forced ad shown after you lose (skipped if you unlocked No Ads)
+function loseAd() { if (!save.noAds) playAd("Better luck next time! 😅", "Continue in", null); }
 
 $("btnAd").onclick = () => {
   if (adCooldown > 0) return;
@@ -2080,6 +2088,7 @@ function endMatch(won, leftEarly) {
     checkMeta();
     persist();
     refreshLabels();
+    if (!won && !leftEarly) loseAd();   // 📺 you lost → here's an ad (unless you have No Ads)
   } catch (e) {
     // absolute last resort: whatever just broke, STILL show an end screen with buttons
     console.error(e);
