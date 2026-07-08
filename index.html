@@ -53,7 +53,7 @@
   .cardRarity { font-size: 12px; font-weight: bold; letter-spacing: 2px; }
   .cardName { font-size: 21px; font-weight: bold; margin: 2px 0; }
   .cardStats { color: #aab2d0; font-size: 14px; margin-bottom: 8px; }
-  .card .row { display: flex; gap: 8px; justify-content: center; }
+  .card .row { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
   .card .row .btn { min-width: 0; font-size: 14px; padding: 8px 12px; }
   .equippedTag { color: #22c55e; font-weight: bold; font-size: 14px; }
 
@@ -497,6 +497,15 @@ const gunDamage = g => {
 const gunPower    = g => gunDamage(g) * baseOf(g).rate * baseOf(g).pellets;
 const gunLabel    = g => RARITIES[g.rarity].name[0] + RARITIES[g.rarity].name.slice(1).toLowerCase() + " " + baseOf(g).name;
 const upgradeCost = g => RARITIES[g.rarity].upCost * g.level;
+
+// total coins to take a gun all the way to Level 5
+// (pass level 0 to include buying the gun itself first)
+function maxOutCost(item, level) {
+  const up = RARITIES[item.rarity].upCost;
+  let cost = level ? 0 : item.price;
+  for (let l = level || 1; l < MAX_LEVEL; l++) cost += up * l;
+  return cost;
+}
 
 // gun prices — commons cost 500-800 coins, higher rarities cost a LOT more
 const _gunPow = {}; GUN_TYPES.forEach(t => _gunPow[t.id] = t.dmg * t.rate * t.pellets);
@@ -1236,6 +1245,21 @@ function renderGunStore() {
         renderGunStore();
       };
       row.appendChild(buy);
+      // ⭐ or buy it ALREADY MAXED to Level 5 — only if you can pay for all of it!
+      const maxCost = maxOutCost(item, 0);
+      const bmax = document.createElement("button");
+      bmax.className = "btn"; bmax.textContent = "⭐ BUY MAXED — " + maxCost + " 🪙";
+      bmax.disabled = save.coins < maxCost;
+      bmax.onclick = () => {
+        save.coins -= maxCost;
+        save.gunsOwned[item.key] = MAX_LEVEL;
+        save.gunEquipped = item.key;
+        ach("maxGun");
+        persist();
+        sndFanfare(true);
+        renderGunStore();
+      };
+      row.appendChild(bmax);
     } else {
       if (save.gunEquipped === item.key) {
         row.innerHTML = '<div class="equippedTag">✔ EQUIPPED</div>';
@@ -1256,6 +1280,22 @@ function renderGunStore() {
         up.onclick = () => { save.coins -= cost; save.gunsOwned[item.key]++; if (save.gunsOwned[item.key] >= MAX_LEVEL) ach("maxGun"); persist(); sndCoin(); renderGunStore(); };
       }
       row.appendChild(up);
+      // ⭐ or jump straight to Level 5 — only if you have enough for ALL the upgrades!
+      if (level < MAX_LEVEL) {
+        const mc = maxOutCost(item, level);
+        const mx = document.createElement("button");
+        mx.className = "btn"; mx.textContent = "⭐ MAX — " + mc + " 🪙";
+        mx.disabled = save.coins < mc;
+        mx.onclick = () => {
+          save.coins -= mc;
+          save.gunsOwned[item.key] = MAX_LEVEL;
+          ach("maxGun");
+          persist();
+          sndFanfare(true);
+          renderGunStore();
+        };
+        row.appendChild(mx);
+      }
     }
     list.appendChild(card);
   }
