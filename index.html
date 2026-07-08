@@ -12,7 +12,20 @@
 
   /* ============ MENU SCREENS (the pages with buttons) ============ */
   .screen { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center;
-            justify-content: center; gap: 14px; background: rgba(10, 12, 25, 0.94); z-index: 10; }
+            justify-content: center; gap: 14px; background: rgba(10, 12, 25, 0.9); z-index: 10; }
+  #menu { background: rgba(10, 12, 25, 0.62); }   /* see-through so the animated stars show */
+
+  /* 🏅 achievement toast that slides in from the top */
+  #achToast { position: fixed; top: 14px; left: 50%; transform: translateX(-50%) translateY(-90px);
+              z-index: 30; background: #1a1f36; border: 2px solid #f5c542; border-radius: 12px;
+              padding: 10px 24px; font-weight: bold; font-size: 16px; color: #f5c542;
+              transition: transform 0.35s ease; pointer-events: none; white-space: nowrap; }
+  #achToast.show { transform: translateX(-50%) translateY(0); }
+
+  /* 🏅 award cards */
+  .achCard { background: #1a1f36; border: 3px solid #f5a623; border-radius: 14px; padding: 10px 14px;
+             width: 280px; text-align: center; }
+  .achCard.locked { border-color: #3a4266; opacity: 0.5; filter: grayscale(0.7); }
   .hidden { display: none !important; }
   h1 { font-size: 54px; margin: 0 0 6px; letter-spacing: 2px; color: #22d3ee; text-shadow: 0 0 24px #22d3ee66; }
   h1 span { color: #f5a623; text-shadow: 0 0 24px #f5a62366; }
@@ -159,6 +172,7 @@
   <button class="btn" id="btnMechs">🤖 MECH STORE</button>
   <button class="btn" id="btnGuns">🔫 GUN STORE</button>
   <button class="btn" id="btnMaps">🗺️ MAPS</button>
+  <button class="btn" id="btnAwards">🏅 STATS & AWARDS</button>
   <button class="btn" id="btnCodes">🔑 SECRET CODES</button>
   <button class="btn" id="btnRestart">🔄 RESTART GAME</button>
   <p class="hint">WASD to move • mouse to aim • click to shoot • earn coins from kills and wins!</p>
@@ -178,6 +192,15 @@
   <div class="statsRow"><span id="gunCoins">🪙 0</span></div>
   <div id="gunList" class="cardList"></div>
   <button class="btn" id="btnGunBack">⬅ BACK</button>
+</div>
+
+<!-- ================= STATS & AWARDS ================= -->
+<div id="awardsScreen" class="screen hidden">
+  <h2>🏅 STATS & AWARDS</h2>
+  <div id="statsLine" style="font-size:16px; color:#aab2d0; text-align:center; line-height:1.8; max-width:92vw;"></div>
+  <div class="statsRow"><span id="achCount"></span></div>
+  <div id="achList" class="cardList"></div>
+  <button class="btn" id="btnAwardsBack">⬅ BACK</button>
 </div>
 
 <!-- ================= MAP SELECT ================= -->
@@ -255,6 +278,7 @@
 <button id="btnMute">🔊</button>
 <button id="btnPause">⏸</button>
 <button id="btnDash">⚡</button>
+<div id="achToast"></div>
 
 <!-- ================= TEAM CHAT (during a match) ================= -->
 <button id="btnChat">💬</button>
@@ -713,13 +737,17 @@ function freshSave() {
   return { coins: 150, wins: 0,
            mechsOwned: [0], mechEquipped: 0,
            gunsOwned: { pistol_common: 1 }, gunEquipped: "pistol_common",
-           codesUsed: {}, mapIdx: 0 };
+           codesUsed: {}, mapIdx: 0,
+           stats: { kills: 0, matches: 0, bossKills: 0, bestFloor: 0, coinsEarned: 0, timePlayed: 0 },
+           ach: {} };
 }
 let save;
 try { save = JSON.parse(localStorage.getItem(SAVE_KEY)); } catch (e) { save = null; }
 if (!save || !save.mechsOwned) save = freshSave();
 if (!save.codesUsed) save.codesUsed = {};   // remembers which secret codes you already used
 if (save.mapIdx == null) save.mapIdx = 0;   // which map you picked (-1 = random each match)
+if (!save.stats) save.stats = { kills: 0, matches: 0, bossKills: 0, bestFloor: 0, coinsEarned: 0, timePlayed: 0 };
+if (!save.ach) save.ach = {};               // your unlocked achievements
 function persist() {
   // saving can fail in some browsers (private mode etc.) — never crash the game for it
   try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) {}
@@ -730,6 +758,63 @@ function equippedGun() {
   const key = save.gunsOwned[save.gunEquipped] ? save.gunEquipped : "pistol_common";
   const [type, rarity] = key.split("_");
   return { type, rarity, level: save.gunsOwned[key] || 1 };
+}
+
+// =====================================================================
+//  ACHIEVEMENTS — 20 awards to hunt for. Unlocking one pops a golden
+//  toast at the top of the screen (works in menus AND mid-battle).
+// =====================================================================
+const ACHS = [
+  { id: "firstBlood",  emoji: "🩸", name: "First Blood",       desc: "Get your first kill" },
+  { id: "destroyer",   emoji: "💯", name: "Destroyer",         desc: "Get 100 kills in total" },
+  { id: "terminator",  emoji: "☠️", name: "Terminator",        desc: "Get 500 kills in total" },
+  { id: "firstWin",    emoji: "🏆", name: "First Victory",     desc: "Win a match" },
+  { id: "champ10",     emoji: "🥇", name: "Champion",          desc: "Win 10 matches" },
+  { id: "legend50",    emoji: "👑", name: "Living Legend",     desc: "Win 50 matches" },
+  { id: "bossSlayer",  emoji: "👹", name: "Boss Slayer",       desc: "Destroy a boss" },
+  { id: "doubleKill",  emoji: "⚡", name: "Double Kill",       desc: "2 kills within 4 seconds" },
+  { id: "rampage",     emoji: "🔥", name: "RAMPAGE",           desc: "Get a 5-kill streak" },
+  { id: "towerTen",    emoji: "🗼", name: "Tower Climber",     desc: "Get past floor 10 in the tower" },
+  { id: "towerTwenty", emoji: "🚀", name: "Sky High",          desc: "Reach floor 20 in the tower" },
+  { id: "gunMaster",   emoji: "🔫", name: "Gun Game Champ",    desc: "Win a Gun Game" },
+  { id: "surviveAll",  emoji: "🌊", name: "Unbreakable",       desc: "Survive all 10 waves" },
+  { id: "bigBattle",   emoji: "⚔️", name: "War Hero",          desc: "Fight in a battle with 60+ mechs" },
+  { id: "rich",        emoji: "💰", name: "Rich",              desc: "Hold 10,000 coins" },
+  { id: "millionaire", emoji: "🤑", name: "Mega Rich",         desc: "Hold 100,000 coins" },
+  { id: "collector",   emoji: "🤖", name: "Mech Collector",    desc: "Own 10 mechs" },
+  { id: "hoarder",     emoji: "🎯", name: "Gun Hoarder",       desc: "Own 20 guns" },
+  { id: "rainbow",     emoji: "🌈", name: "Rainbow Rank",      desc: "Reach the Rainbow rank" },
+  { id: "maxGun",      emoji: "⭐", name: "Fully Loaded",      desc: "Upgrade a gun to Level 5" },
+];
+let achToastTimer = null;
+function achToast(txt) {
+  const el = $("achToast");
+  if (!el) return;
+  el.textContent = txt;
+  el.classList.add("show");
+  clearTimeout(achToastTimer);
+  achToastTimer = setTimeout(() => el.classList.remove("show"), 3200);
+}
+function ach(id) {
+  if (save.ach[id]) return;
+  save.ach[id] = true;
+  persist();
+  const a = ACHS.find(x => x.id === id);
+  if (a) { achToast("🏅 ACHIEVEMENT: " + a.emoji + " " + a.name + "!"); sndFanfare(true); }
+}
+// checks all the "collect stuff" achievements (coins, mechs, wins...)
+function checkMeta() {
+  if (save.coins >= 10000) ach("rich");
+  if (save.coins >= 100000) ach("millionaire");
+  if (save.mechsOwned.length >= 10) ach("collector");
+  if (Object.keys(save.gunsOwned).length >= 20) ach("hoarder");
+  if (rankIndexFor(save.wins) >= 9) ach("rainbow");
+  if (save.wins >= 1) ach("firstWin");
+  if (save.wins >= 10) ach("champ10");
+  if (save.wins >= 50) ach("legend50");
+  if (save.stats.kills >= 1) ach("firstBlood");
+  if (save.stats.kills >= 100) ach("destroyer");
+  if (save.stats.kills >= 500) ach("terminator");
 }
 
 // =====================================================================
@@ -776,7 +861,7 @@ function sndFanfare(big) {
 let state = "menu";   // "menu" or "game" or "end"
 
 function showScreen(id) {
-  ["menu", "mechStore", "gunStore", "mapScreen", "modeScreen", "codesScreen", "endScreen"].forEach(s => $(s).classList.add("hidden"));
+  ["menu", "mechStore", "gunStore", "mapScreen", "modeScreen", "codesScreen", "awardsScreen", "endScreen"].forEach(s => $(s).classList.add("hidden"));
   if (id) $(id).classList.remove("hidden");
 }
 function refreshLabels() {
@@ -793,8 +878,34 @@ function refreshLabels() {
     (next ? '  <span style="color:#8b93b0">→ next ' + next.emoji + " " + next.name +
             " in " + (next.wins - save.wins) + " wins</span>"
           : '  <span style="color:#f5c542">👑 MAX RANK!</span>');
+  checkMeta();   // maybe you just earned a collect-stuff achievement!
 }
 function goMenu() { state = "menu"; resetRestartBtn(); refreshLabels(); showScreen("menu"); }
+
+// ---------- the STATS & AWARDS screen ----------
+function renderAwards() {
+  const st = save.stats;
+  $("statsLine").innerHTML =
+    "🎯 <b>" + st.kills + "</b> kills • 🎮 <b>" + st.matches + "</b> matches • 🏆 <b>" + save.wins + "</b> wins • 👹 <b>" +
+    st.bossKills + "</b> bosses • 🗼 best floor <b>" + st.bestFloor + "</b> • 🪙 <b>" + st.coinsEarned +
+    "</b> earned • ⏱ <b>" + Math.round(st.timePlayed / 60) + "</b> min played";
+  const got = ACHS.filter(a => save.ach[a.id]).length;
+  $("achCount").textContent = "🏅 " + got + " / " + ACHS.length + " unlocked";
+  const list = $("achList");
+  list.innerHTML = "";
+  const sorted = [...ACHS].sort((a, b) => (save.ach[b.id] ? 1 : 0) - (save.ach[a.id] ? 1 : 0));
+  for (const a of sorted) {
+    const un = !!save.ach[a.id];
+    const card = document.createElement("div");
+    card.className = "achCard" + (un ? "" : " locked");
+    card.innerHTML = '<div class="cardName">' + (un ? a.emoji : "🔒") + " " + a.name + '</div>' +
+                     '<div class="cardStats">' + a.desc + '</div>' +
+                     (un ? '<div class="equippedTag">✔ UNLOCKED</div>' : '');
+    list.appendChild(card);
+  }
+}
+$("btnAwards").onclick = () => { sndClick(); renderAwards(); showScreen("awardsScreen"); };
+$("btnAwardsBack").onclick = () => { sndClick(); goMenu(); };
 
 $("btnPlay").onclick  = () => { sndClick(); syncModeLabels(); showScreen("modeScreen"); };
 $("btnMechs").onclick = () => { sndClick(); renderMechStore(); showScreen("mechStore"); };
@@ -1142,7 +1253,7 @@ function renderGunStore() {
         const cost = upgradeCost(g);
         up.textContent = "⬆ " + gunDamage(g) + "→" + gunDamage({ ...g, level: level + 1 }) + " dmg (" + cost + "🪙)";
         up.disabled = save.coins < cost;
-        up.onclick = () => { save.coins -= cost; save.gunsOwned[item.key]++; persist(); sndCoin(); renderGunStore(); };
+        up.onclick = () => { save.coins -= cost; save.gunsOwned[item.key]++; if (save.gunsOwned[item.key] >= MAX_LEVEL) ach("maxGun"); persist(); sndCoin(); renderGunStore(); };
       }
       row.appendChild(up);
     }
@@ -1263,7 +1374,7 @@ function botGun(boost) {
 
 // ---------- start a new match ----------
 // mode = "ffa" (everyone solo) or "teams"; size = players per team (teams) or total players (ffa)
-let matchMode = "ffa", matchTeamSize = 0, lastCfg = { mode: "ffa", size: 6 }, difficulty = 0;
+let matchMode = "ffa", matchTeamSize = 0, lastCfg = { mode: "ffa", size: 6 }, difficulty = 0, matchTotal = 0;
 let wave = 0, waveDelay = 0, wavePending = false, gungameWinner = null;
 let towerChoosing = false;   // 🗼 true while you're picking a boss power (game frozen)
 
@@ -1310,6 +1421,7 @@ function startMatch(cfg) {
               : matchMode === "tower" ? 6
               : size;
   difficulty = rankIndexFor(save.wins);      // higher rank = tougher enemies AND more coins
+  matchTotal = total;                        // remembered for the War Hero achievement
   // coins scale with BOTH how many mechs are fighting AND your rank
   matchCoinMult = clamp(total / 6, 1, 10) * (1 + difficulty * 0.2);
 
@@ -1588,6 +1700,9 @@ function hurt(f, dmg, killer) {
     }
     if (killer && killer.isPlayer && !f.isPlayer) {
       matchKills++;
+      save.stats.kills++;
+      if (f.isBoss) { save.stats.bossKills++; ach("bossSlayer"); }
+      checkMeta();   // kill-count achievements unlock instantly
       if (f.isBoss) { bonusCoins += killCoins() * 5; floaty(f.x, f.y - 44, "💥 BOSS DOWN! +" + (killCoins() * 6) + " 🪙", "#ffca3a"); }
       else floaty(f.x, f.y - 40, "+" + killCoins() + " 🪙", "#f5c542");
       sndCoin();
@@ -1603,7 +1718,8 @@ function hurt(f, dmg, killer) {
       streak = (gameTime - lastKillTime < 4) ? streak + 1 : 1;
       lastKillTime = gameTime;
       const shout = { 2: "DOUBLE KILL!", 3: "TRIPLE KILL!", 4: "MULTI KILL!", 5: "RAMPAGE!", 6: "UNSTOPPABLE!" };
-      if (streak >= 2) { banner("🔥 " + (shout[Math.min(streak, 6)] || "GODLIKE!!!"), "#f5a623"); sndFanfare(true); }
+      if (streak >= 2) { banner("🔥 " + (shout[Math.min(streak, 6)] || "GODLIKE!!!"), "#f5a623"); sndFanfare(true); ach("doubleKill"); }
+      if (streak >= 5) ach("rampage");
     }
     // 🔫 GUN GAME: every kill climbs the killer to the next gun; a kill with the LAST gun wins!
     // (runs AFTER the kill-credit above so the winning kill's coins get banked too.
@@ -1742,9 +1858,23 @@ function endMatch(won, leftEarly) {
       conf.appendChild(d);
     }
 
-    // then bank the coins and save
+    // then bank the coins, update your lifetime stats, and save
     if (won) { save.wins++; sndFanfare(true); }
     save.coins += matchEarned() + bonus;
+    save.stats.matches++;
+    save.stats.coinsEarned += matchEarned() + bonus;
+    if (matchMode === "tower") {
+      if (wave > save.stats.bestFloor) {
+        save.stats.bestFloor = wave;
+        if (wave > 1) achToast("🗼 NEW RECORD: floor " + wave + "!");
+      }
+      if (wave > 10) ach("towerTen");
+      if (wave >= 20) ach("towerTwenty");
+    }
+    if (won && matchMode === "gungame") ach("gunMaster");
+    if (won && matchMode === "survival") ach("surviveAll");
+    if (matchTotal >= 60) ach("bigBattle");
+    checkMeta();
     persist();
     refreshLabels();
   } catch (e) {
@@ -1763,6 +1893,7 @@ function endMatch(won, leftEarly) {
 // ---------- update everything each frame ----------
 function update(dt) {
   gameTime += dt;
+  save.stats.timePlayed += dt;   // lifetime play clock (saved at match end)
 
   // bonus maps periodically shoot bullets across the arena
   if (curMap.hazard) { hazardT -= dt; if (hazardT <= 0) { fireHazard(); hazardT = 1 + Math.random() * 1.4; } }
@@ -2413,6 +2544,35 @@ $("btnPause").addEventListener("touchstart", e => { e.preventDefault(); if (stat
 $("btnPause").onclick = () => { if (state === "game") paused = !paused; };
 if (isTouch) document.body.classList.add("touch");
 
+// ---------- animated menu background: drifting stars + glowing orbs ----------
+let menuFx = null;
+function drawMenuBg(dt) {
+  if (!menuFx) {
+    menuFx = { t: 0, stars: [] };
+    for (let i = 0; i < 110; i++) menuFx.stars.push({ x: Math.random(), y: Math.random(), s: 0.4 + Math.random() * 1.6, p: Math.random() * 7 });
+  }
+  menuFx.t += dt;
+  const w = canvas.width, h = canvas.height, t = menuFx.t;
+  const g = ctx.createLinearGradient(0, 0, 0, h);
+  g.addColorStop(0, "#0b0e1d"); g.addColorStop(1, "#141b36");
+  ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+  for (let i = 0; i < 3; i++) {   // slow glowing orbs floating around
+    const ox = w * (0.2 + 0.3 * i) + Math.sin(t * 0.12 + i * 2.1) * w * 0.12;
+    const oy = h * 0.5 + Math.cos(t * 0.09 + i * 1.7) * h * 0.28;
+    const og = ctx.createRadialGradient(ox, oy, 0, ox, oy, 270);
+    const col = ["34,211,238", "168,85,247", "245,166,35"][i];
+    og.addColorStop(0, "rgba(" + col + ",0.12)"); og.addColorStop(1, "rgba(" + col + ",0)");
+    ctx.fillStyle = og; ctx.beginPath(); ctx.arc(ox, oy, 270, 0, 7); ctx.fill();
+  }
+  for (const s of menuFx.stars) {   // twinkling drifting stars
+    const x = ((s.x + t * 0.008 * s.s) % 1) * w, y = ((s.y + t * 0.004 * s.s) % 1) * h;
+    ctx.globalAlpha = 0.25 + 0.55 * Math.abs(Math.sin(t * 1.5 + s.p));
+    ctx.fillStyle = "#cfe4ff";
+    ctx.fillRect(x, y, s.s * 1.7, s.s * 1.7);
+  }
+  ctx.globalAlpha = 1;
+}
+
 // dark overlay shown when the game is paused
 function drawPauseOverlay() {
   ctx.fillStyle = "rgba(8,10,20,0.62)";
@@ -2437,7 +2597,10 @@ function tick(now) {
   requestAnimationFrame(tick);
   const dt = Math.min((now - lastT) / 1000, 0.05);
   lastT = now;
-  if (state !== "game") return;
+  if (state !== "game") {
+    if (state === "menu") { try { drawMenuBg(dt); } catch (e) {} }   // living menu background
+    return;
+  }
   // if one frame breaks, skip it and keep playing — the game must NEVER freeze
   try {
     if (!paused && !chatOpen && !towerChoosing) update(dt);   // chatting / picking a power freezes the fight
