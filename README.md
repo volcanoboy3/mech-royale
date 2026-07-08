@@ -36,4 +36,16 @@ python3 -m http.server 8000
 # then open http://localhost:8000
 ```
 
+## 💰 Turning on real ads (for a grown-up)
+The game ships with safe **pretend ads** (rewarded "watch for coins", a lose-screen interstitial, and occasional menu pop-ups) already wired through one function. To make them real, money-earning ads:
+
+1. Sign up (free, 18+) at [gamemonetize.com](https://gamemonetize.com) and register the game to get a **Game ID**.
+2. In `index.html`, find `AD_CONFIG` and change it to:
+   ```js
+   const AD_CONFIG = { provider: "gamemonetize", gameId: "YOUR-GAME-ID" };
+   ```
+3. Redeploy. Every pretend ad now requests a real ad first and falls back to the pretend one if none is available. Earnings are paid to the account holder.
+
+In-game, the secret **No Ads** unlock disables all interstitials/pop-ups either way.
+
 Made with ❤️ and vanilla JavaScript + HTML canvas.

@@ -1095,9 +1095,64 @@ setInterval(() => { if (adCooldown > 0) { adCooldown = Math.max(0, adCooldown - 
 
 // plays a (pretend) ad for 5 seconds, then runs onDone. Swap the pretend
 // part for a real ad company's call to earn money.
+// =====================================================================
+//  💰 REAL ADS SWITCH — this is the one-line setup for a grown-up!
+//  1. Sign up free at gamemonetize.com (ads for HTML5 games)
+//  2. Add the game there and copy the "Game ID" they give you
+//  3. Paste it below and change provider to "gamemonetize":
+//       const AD_CONFIG = { provider: "gamemonetize", gameId: "PASTE-ID-HERE" };
+//  That's it — every pretend ad becomes a real money-earning ad.
+//  Until then, the game safely plays pretend ads.
+// =====================================================================
+const AD_CONFIG = { provider: "none", gameId: "" };
+
+let realAdsReady = false, pendingAdDone = null;
+function initRealAds() {
+  if (AD_CONFIG.provider !== "gamemonetize" || !AD_CONFIG.gameId) return;
+  try {
+    window.SDK_OPTIONS = {
+      gameId: AD_CONFIG.gameId,
+      onEvent: (ev) => {
+        if (ev.name === "SDK_READY") realAdsReady = true;
+        // "SDK_GAME_START" = the ad closed and the game may continue
+        if ((ev.name === "SDK_GAME_START" || ev.name === "SDK_ERROR") && pendingAdDone) {
+          const done = pendingAdDone; pendingAdDone = null; done();
+        }
+      },
+    };
+    const s = document.createElement("script");
+    s.src = "https://api.gamemonetize.com/sdk.js";
+    s.onerror = () => { realAdsReady = false; };
+    document.head.appendChild(s);
+  } catch (e) {}
+}
+initRealAds();
+
+// tries to show a REAL ad; returns false if we can't (then we use the pretend one)
+function showRealAd(onDone) {
+  try {
+    if (realAdsReady && window.sdk && typeof window.sdk.showBanner === "function") {
+      pendingAdDone = onDone;
+      window.sdk.showBanner();
+      setTimeout(() => {   // safety net: never leave the player stuck waiting on an ad
+        if (pendingAdDone === onDone) { pendingAdDone = null; onDone(); }
+      }, 15000);
+      return true;
+    }
+  } catch (e) {}
+  return false;
+}
+
 let adPlaying = false;
 function playAd(msg, endLabel, onDone) {
   if (adPlaying) { if (onDone) onDone(); return; }   // never stack two ads
+  // real ads first (only if the grown-up has set AD_CONFIG above)
+  if (AD_CONFIG.provider !== "none") {
+    adPlaying = true;
+    const finish = () => { adPlaying = false; if (onDone) onDone(); };
+    if (showRealAd(finish)) return;
+    adPlaying = false;   // real ad unavailable → fall back to the pretend one
+  }
   adPlaying = true;
   ensureAudio();
   const ov = $("adOverlay"), art = $("adArt"), m = $("adMsg"), timer = $("adTimer");
