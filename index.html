@@ -1014,12 +1014,53 @@ $("btnRanksBack").onclick = () => { sndClick(); goMenu(); };
 // ---------- 💎 PACKS: real-money shop. The more expensive, the better the pack.
 //            NOTE: payment is NOT wired up yet — a grown-up sets that up later. ----------
 const PACKS = [
-  { name: "🥉 Starter Pack",   price: "$0.99",  color: "#9aa0ad", what: "🤖 Blue Bolt mech<br>🔫 Rare SMG<br>+ 5,000 🪙" },
-  { name: "🥈 Cool Pack",      price: "$5.99",  color: "#3b82f6", what: "🤖 Phantom mech<br>🔫 Mythic Minigun<br>+ 25,000 🪙" },
-  { name: "🥇 Epic Pack",      price: "$12.99", color: "#a855f7", what: "🤖 Dragon Fire mech<br>🔫 Legendary Sniper<br>+ 60,000 🪙" },
-  { name: "💎 Legendary Pack", price: "$29.99", color: "#f5a623", what: "🤖 Mega Destroyer + Omega Prime + Annihilator<br>🔫 Legendary BFG + Railgun<br>+ 150,000 🪙" },
-  { name: "👑 GOD Pack",       price: "$59.99", color: "#ffd700", what: "👑 ALL 60 mechs + ALL 112 guns<br>+ 1,000,000 🪙" },
+  { id: "starter",   name: "🥉 Starter Pack",   price: "$0.99",  color: "#9aa0ad", what: "🤖 Blue Bolt mech<br>🔫 Rare SMG<br>+ 5,000 🪙" },
+  { id: "cool",      name: "🥈 Cool Pack",      price: "$5.99",  color: "#3b82f6", what: "🤖 Phantom mech<br>🔫 Mythic Minigun<br>+ 25,000 🪙" },
+  { id: "epic",      name: "🥇 Epic Pack",      price: "$12.99", color: "#a855f7", what: "🤖 Dragon Fire mech<br>🔫 Legendary Sniper<br>+ 60,000 🪙" },
+  { id: "legendary", name: "💎 Legendary Pack", price: "$29.99", color: "#f5a623", what: "🤖 Mega Destroyer + Omega Prime + Annihilator<br>🔫 Legendary BFG + Railgun<br>+ 150,000 🪙" },
+  { id: "god",       name: "👑 GOD Pack",       price: "$59.99", color: "#ffd700", what: "👑 ALL 60 mechs + ALL 112 guns<br>+ 1,000,000 🪙" },
 ];
+
+// =====================================================================
+//  💳 REAL PAYMENTS SWITCH — for a grown-up (18+):
+//  1. Create a free Stripe account and make 5 "Payment Links",
+//     one per pack, with the same prices as above.
+//  2. On each link's confirmation page, put that pack's secret
+//     redemption code from PACK_CODES below (change the codes first!).
+//  3. Paste the 5 payment-link URLs here and redeploy:
+// =====================================================================
+const PAY_CONFIG = { starter: "", cool: "", epic: "", legendary: "", god: "" };
+
+// secret redemption codes — the buyer gets one after paying, then types
+// it into 🔑 SECRET CODES and the pack is granted (one time per save)
+const PACK_CODES = {
+  "MRP-STAR-7414": "starter",
+  "MRP-COOL-2688": "cool",
+  "MRP-EPIC-9157": "epic",
+  "MRP-LGND-4732": "legendary",
+  "MRP-GOD-8365":  "god",
+};
+
+function grantMechByName(name) {
+  const i = MECHS.findIndex(m => m.name === name);
+  if (i >= 0 && !save.mechsOwned.includes(i)) save.mechsOwned.push(i);
+}
+function grantGun(key) { if (!save.gunsOwned[key]) save.gunsOwned[key] = 1; }
+
+// hands out EXACTLY what each pack's card promises
+function grantPack(id) {
+  if (id === "starter")   { grantMechByName("Blue Bolt"); grantGun("smg_rare"); save.coins += 5000; }
+  if (id === "cool")      { grantMechByName("Phantom"); grantGun("minigun_mythic"); save.coins += 25000; }
+  if (id === "epic")      { grantMechByName("Dragon Fire"); grantGun("sniper_legendary"); save.coins += 60000; }
+  if (id === "legendary") { grantMechByName("Mega Destroyer"); grantMechByName("Omega Prime"); grantMechByName("Annihilator");
+                            grantGun("bfg_legendary"); grantGun("rail_legendary"); save.coins += 150000; }
+  if (id === "god")       { MECHS.forEach((m, i) => { if (!save.mechsOwned.includes(i)) save.mechsOwned.push(i); });
+                            for (const it of GUN_CATALOG) grantGun(it.key);
+                            save.coins += 1000000; }
+  persist();
+  refreshLabels();
+}
+
 function renderPacks() {
   const list = $("packList");
   list.innerHTML = "";
@@ -1033,8 +1074,17 @@ function renderPacks() {
       '<div class="packWhat">' + p.what + '</div>';
     const buy = document.createElement("button");
     buy.className = "btn"; buy.textContent = "💳 BUY " + p.price;
-    // payment is not real yet — just tell them it's coming soon
-    buy.onclick = () => { sndClick(); achToast("💳 Real-money packs coming soon — ask a grown-up!"); };
+    buy.onclick = () => {
+      sndClick();
+      const url = PAY_CONFIG[p.id];
+      if (url) {
+        // real payment page opens; after paying they get a pack code to type in
+        window.open(url, "_blank");
+        achToast("💳 After paying, type your pack code in 🔑 SECRET CODES!");
+      } else {
+        achToast("💳 Real-money packs coming soon — ask a grown-up!");
+      }
+    };
     card.appendChild(buy);
     list.appendChild(card);
   }
@@ -1266,6 +1316,23 @@ function redeemCode(raw) {
   const code = (raw || "").trim().toUpperCase();
   const msg = $("codeMsg");
   if (!code) return;
+  // 💳 pack redemption codes (given after a real purchase) — one time each
+  if (PACK_CODES[code]) {
+    if (save.codesUsed[code]) {
+      msg.textContent = "⚠ That pack code was already used";
+      msg.style.color = "#f5c542";
+      sndClick();
+    } else {
+      save.codesUsed[code] = true;
+      grantPack(PACK_CODES[code]);
+      const pk = PACKS.find(p => p.id === PACK_CODES[code]);
+      msg.textContent = "📦 " + (pk ? pk.name : "Pack") + " unlocked! Enjoy!";
+      msg.style.color = "#22c55e";
+      sndFanfare(true);
+    }
+    $("codeInput").value = "";
+    return;
+  }
   const found = CODES.find(c => c.code === code);
   if (!found) {
     msg.textContent = "❌ That's not a real code";

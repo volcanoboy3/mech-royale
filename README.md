@@ -48,4 +48,14 @@ The game ships with safe **pretend ads** (rewarded "watch for coins", a lose-scr
 
 In-game, the secret **No Ads** unlock disables all interstitials/pop-ups either way.
 
+## 💳 Turning on real payments for packs (for a grown-up)
+The 💎 PACKS shop is fully built — only the payment account is missing:
+
+1. Create a [Stripe](https://stripe.com) account (18+, free) and make **5 Payment Links**, one per pack, matching the in-game prices ($0.99 / $5.99 / $12.99 / $29.99 / $59.99).
+2. In `index.html`, find `PACK_CODES` and **change the redemption codes** to your own secrets.
+3. For each Stripe Payment Link, set the **confirmation page message** to show that pack's redemption code ("Your pack code: MRP-…").
+4. Paste the 5 Payment Link URLs into `PAY_CONFIG` in `index.html` and redeploy.
+
+Flow: BUY opens the Stripe page → buyer pays → sees their code → types it in 🔑 SECRET CODES → the pack's exact contents are granted (one-time per save). Note: this code-based delivery is simple and fine for a small game, but codes can be shared — bulletproof delivery would need a small server with Stripe webhooks.
+
 Made with ❤️ and vanilla JavaScript + HTML canvas.
