@@ -1014,11 +1014,11 @@ $("btnRanksBack").onclick = () => { sndClick(); goMenu(); };
 // ---------- 💎 PACKS: real-money shop. The more expensive, the better the pack.
 //            NOTE: payment is NOT wired up yet — a grown-up sets that up later. ----------
 const PACKS = [
-  { name: "🥉 Starter Pack",   price: "$0.99",  color: "#9aa0ad", what: "2 Rare mechs + 2 Rare guns<br>+ 5,000 🪙" },
-  { name: "🥈 Cool Pack",      price: "$2.99",  color: "#3b82f6", what: "2 Mythic mechs + 3 Mythic guns<br>+ 25,000 🪙" },
-  { name: "🥇 Epic Pack",      price: "$4.99",  color: "#a855f7", what: "1 Legendary mech + 2 Legendary guns<br>+ 60,000 🪙" },
-  { name: "💎 Legendary Pack", price: "$9.99",  color: "#f5a623", what: "3 Legendary mechs + 4 Legendary guns<br>+ 150,000 🪙" },
-  { name: "👑 GOD Pack",       price: "$19.99", color: "#ffd700", what: "ALL 60 mechs + ALL 112 guns<br>+ 1,000,000 🪙" },
+  { name: "🥉 Starter Pack",   price: "$0.99",  color: "#9aa0ad", what: "🤖 Blue Bolt mech<br>🔫 Rare SMG<br>+ 5,000 🪙" },
+  { name: "🥈 Cool Pack",      price: "$5.99",  color: "#3b82f6", what: "🤖 Phantom mech<br>🔫 Mythic Minigun<br>+ 25,000 🪙" },
+  { name: "🥇 Epic Pack",      price: "$12.99", color: "#a855f7", what: "🤖 Dragon Fire mech<br>🔫 Legendary Sniper<br>+ 60,000 🪙" },
+  { name: "💎 Legendary Pack", price: "$29.99", color: "#f5a623", what: "🤖 Mega Destroyer + Omega Prime + Annihilator<br>🔫 Legendary BFG + Railgun<br>+ 150,000 🪙" },
+  { name: "👑 GOD Pack",       price: "$59.99", color: "#ffd700", what: "👑 ALL 60 mechs + ALL 112 guns<br>+ 1,000,000 🪙" },
 ];
 function renderPacks() {
   const list = $("packList");
