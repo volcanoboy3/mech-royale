@@ -13,7 +13,16 @@
   /* ============ MENU SCREENS (the pages with buttons) ============ */
   .screen { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center;
             justify-content: center; gap: 14px; background: rgba(10, 12, 25, 0.9); z-index: 10; }
-  #menu { background: rgba(10, 12, 25, 0.62); justify-content: flex-start; padding: 24px 0 40px; overflow-y: auto; }
+  #menu { background: rgba(10, 12, 25, 0.62); justify-content: flex-start; padding: 20px; overflow-y: auto; }
+  /* 🧭 neat centered panel: all the menu stuff sits in a tidy block in the middle */
+  .menuPanel { margin: auto; width: min(600px, 96vw);
+               background: rgba(18, 22, 42, 0.72); border: 2px solid #2b3358; border-radius: 22px;
+               padding: 20px 24px 24px; box-shadow: 0 14px 44px rgba(0, 0, 0, 0.45);
+               display: flex; flex-direction: column; align-items: center; gap: 11px; }
+  .menuGrid { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 4px; }
+  .menuGrid .btn { min-width: 0; width: 100%; font-size: 17px; padding: 13px 10px; }
+  .menuGrid .big, .menuGrid .wide { grid-column: 1 / -1; }
+  .menuGrid .big { font-size: 24px; padding: 15px; }
 
   /* ✨ animated logo: pops in and glows */
   #menu h1 { animation: logoPop 0.6s cubic-bezier(.2,1.4,.4,1), logoGlow 2.6s ease-in-out infinite; }
@@ -168,6 +177,12 @@
     .btn { min-width: min(300px, 84vw); font-size: 18px; padding: 12px 20px; }
     .btn.big { font-size: 22px; padding: 14px 30px; }
     .screen { gap: 10px; padding: 10px; }
+    /* keep the tidy 2-column menu block compact on phones */
+    #menu { padding: 10px; }
+    .menuPanel { padding: 16px 14px 18px; gap: 9px; }
+    .menuGrid { gap: 8px; }
+    .menuGrid .btn { font-size: 15px; padding: 12px 6px; }
+    .menuGrid .big { font-size: 21px; padding: 13px; }
   }
 
   /* ============ MAP CARDS ============ */
@@ -200,23 +215,27 @@
 
 <!-- ================= MAIN MENU ================= -->
 <div id="menu" class="screen">
-  <h1><span id="secretM">M</span>ECH <span>ROYALE</span></h1>
-  <div class="statsRow"><span id="menuCoins">🪙 0</span><span id="menuWins">🏆 Wins: 0</span></div>
-  <div id="rankLine"></div>
-  <div id="loadoutLine">🤖 Rust Bucket • 🔫 Common Pistol</div>
-  <button class="btn big" id="btnPlay">▶ PLAY</button>
-  <button class="btn" id="btnMechs">🤖 MECH STORE</button>
-  <button class="btn" id="btnGuns">🔫 GUN STORE</button>
-  <button class="btn" id="btnPets">🐾 PETS</button>
-  <button class="btn" id="btnDecos">🎩 DECORATE</button>
-  <button class="btn" id="btnPacks">💎 BUY PACKS</button>
-  <button class="btn" id="btnMaps">🗺️ MAPS</button>
-  <button class="btn" id="btnRanks">🎖️ RANKS</button>
-  <button class="btn" id="btnAwards">🏅 STATS & AWARDS</button>
-  <button class="btn" id="btnAd">📺 WATCH AD → +500 🪙</button>
-  <button class="btn" id="btnCodes">🔑 SECRET CODES</button>
-  <button class="btn" id="btnRestart">🔄 RESTART GAME</button>
-  <p class="hint">WASD to move • mouse to aim • click to shoot • earn coins from kills and wins!</p>
+  <div class="menuPanel">
+    <h1><span id="secretM">M</span>ECH <span>ROYALE</span></h1>
+    <div class="statsRow"><span id="menuCoins">🪙 0</span><span id="menuWins">🏆 Wins: 0</span></div>
+    <div id="rankLine"></div>
+    <div id="loadoutLine">🤖 Rust Bucket • 🔫 Common Pistol</div>
+    <div class="menuGrid">
+      <button class="btn big" id="btnPlay">▶ PLAY</button>
+      <button class="btn" id="btnMechs">🤖 MECH STORE</button>
+      <button class="btn" id="btnGuns">🔫 GUN STORE</button>
+      <button class="btn" id="btnPets">🐾 PETS</button>
+      <button class="btn" id="btnDecos">🎩 DECORATE</button>
+      <button class="btn" id="btnPacks">💎 BUY PACKS</button>
+      <button class="btn" id="btnMaps">🗺️ MAPS</button>
+      <button class="btn" id="btnRanks">🎖️ RANKS</button>
+      <button class="btn" id="btnAwards">🏅 STATS & AWARDS</button>
+      <button class="btn" id="btnAd">📺 WATCH AD → +500 🪙</button>
+      <button class="btn" id="btnCodes">🔑 SECRET CODES</button>
+      <button class="btn wide" id="btnRestart">🔄 RESTART GAME</button>
+    </div>
+    <p class="hint">WASD to move • mouse to aim • click to shoot • earn coins from kills and wins!</p>
+  </div>
 </div>
 
 <!-- ================= MECH STORE ================= -->
