@@ -41,6 +41,17 @@
   .hidden { display: none !important; }
   h1 { font-size: 54px; margin: 0 0 6px; letter-spacing: 2px; color: #22d3ee; text-shadow: 0 0 24px #22d3ee66; }
   h1 span { color: #f5a623; text-shadow: 0 0 24px #f5a62366; }
+  /* the M is a really really secret button — looks exactly like the rest of MECH */
+  #secretM { color: #22d3ee; text-shadow: 0 0 24px #22d3ee66; cursor: default; }
+  #secretPw { position: fixed; inset: 0; z-index: 40; background: rgba(0,0,0,0.85);
+              display: flex; align-items: center; justify-content: center; }
+  #secretPwBox { width: min(92vw, 380px); background: #11162b; border: 3px solid #a855f7;
+                 border-radius: 16px; padding: 22px; text-align: center; display: flex; flex-direction: column; gap: 12px; }
+  #secretPwInput { font-size: 20px; padding: 10px 14px; border-radius: 10px; border: 2px solid #3a4266;
+                   background: #10142a; color: #fff; text-align: center; letter-spacing: 4px; }
+  #secretPwInput:focus { outline: none; border-color: #a855f7; }
+  #secretPwMsg { font-weight: bold; min-height: 18px; }
+  #secretPwBox .btn { min-width: 0; }
   h2 { font-size: 34px; margin: 0; }
   .statsRow { display: flex; gap: 26px; font-size: 22px; font-weight: bold; }
   .hint { color: #8b93b0; font-size: 15px; }
@@ -176,7 +187,7 @@
 
 <!-- ================= MAIN MENU ================= -->
 <div id="menu" class="screen">
-  <h1>MECH <span>ROYALE</span></h1>
+  <h1><span id="secretM">M</span>ECH <span>ROYALE</span></h1>
   <div class="statsRow"><span id="menuCoins">🪙 0</span><span id="menuWins">🏆 Wins: 0</span></div>
   <div id="rankLine"></div>
   <div id="loadoutLine">🤖 Rust Bucket • 🔫 Common Pistol</div>
@@ -301,6 +312,19 @@
 <button id="btnPause">⏸</button>
 <button id="btnDash">⚡</button>
 <div id="achToast"></div>
+
+<!-- ================= THE REALLY SECRET PASSWORD (hidden on the "M") ================= -->
+<div id="secretPw" class="hidden">
+  <div id="secretPwBox">
+    <div style="font-size:16px;color:#c9a6ff;font-weight:bold">🔒 Enter the secret password</div>
+    <input id="secretPwInput" type="password" autocomplete="off" spellcheck="false">
+    <div id="secretPwMsg"></div>
+    <div style="display:flex;gap:8px;justify-content:center">
+      <button class="btn" id="secretPwGo">ENTER</button>
+      <button class="btn" id="secretPwClose">✖</button>
+    </div>
+  </div>
+</div>
 
 <!-- ================= WATCH-AD SCREEN (pretend ad for now) ================= -->
 <div id="adOverlay" class="hidden">
@@ -919,6 +943,7 @@ function refreshLabels() {
     (next ? '  <span style="color:#8b93b0">→ next ' + next.emoji + " " + next.name +
             " in " + (next.wins - save.wins) + " wins</span>"
           : '  <span style="color:#f5c542">👑 MAX RANK!</span>');
+  const ab = $("btnAd"); if (ab) ab.classList.toggle("hidden", !!save.noAds);   // 🚫 No-Ads perk hides the ad button
   checkMeta();   // maybe you just earned a collect-stuff achievement!
 }
 function goMenu() { state = "menu"; resetRestartBtn(); refreshLabels(); showScreen("menu"); }
@@ -970,6 +995,42 @@ function renderRanks() {
 }
 $("btnRanks").onclick = () => { sndClick(); renderRanks(); showScreen("ranksScreen"); };
 $("btnRanksBack").onclick = () => { sndClick(); goMenu(); };
+
+// =====================================================================
+//  🔒 THE REALLY REALLY SECRET BUTTON — click the "M" of MECH ROYALE.
+//  It asks for a password (typed as hidden dots). The password is NOT
+//  shown anywhere. Get it right → NO ADS forever!
+// =====================================================================
+const SECRET_PW = "timsterlovergfjui";   // "timster lover gfjui" with spaces removed
+function closeSecretPw() { $("secretPw").classList.add("hidden"); $("secretPwInput").value = ""; }
+function trySecretPw() {
+  const val = $("secretPwInput").value.trim().toLowerCase().replace(/\s+/g, "");
+  if (val === SECRET_PW) {
+    save.noAds = true;   // 🚫 the secret password gives you NO ADS forever
+    persist(); refreshLabels();
+    closeSecretPw();
+    achToast(save.noAds ? "🚫 NO ADS unlocked forever!" : "🚫 No Ads!");
+    sndFanfare(true);
+  } else {
+    $("secretPwMsg").textContent = "❌ Nope, try again";
+    $("secretPwMsg").style.color = "#ef4444";
+    $("secretPwInput").value = "";
+    beep(140, 0.2, "sawtooth", 0.1, 90);
+  }
+}
+$("secretM").onclick = () => {
+  sndClick();
+  $("secretPwInput").value = ""; $("secretPwMsg").textContent = "";
+  $("secretPw").classList.remove("hidden");
+  setTimeout(() => { try { $("secretPwInput").focus(); } catch (e) {} }, 0);
+};
+$("secretPwGo").onclick = () => trySecretPw();
+$("secretPwClose").onclick = () => { sndClick(); closeSecretPw(); };
+$("secretPwInput").addEventListener("keydown", e => {
+  if (e.key === "Enter") trySecretPw();
+  if (e.key === "Escape") closeSecretPw();
+  e.stopPropagation();
+});
 
 // =====================================================================
 //  📺 WATCH-AD BUTTON — watch a (pretend) ad to earn 500 coins.
