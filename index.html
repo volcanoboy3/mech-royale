@@ -13,7 +13,12 @@
   /* ============ MENU SCREENS (the pages with buttons) ============ */
   .screen { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center;
             justify-content: center; gap: 14px; background: rgba(10, 12, 25, 0.9); z-index: 10; }
-  #menu { background: rgba(10, 12, 25, 0.62); }   /* see-through so the animated stars show */
+  #menu { background: rgba(10, 12, 25, 0.62); justify-content: flex-start; padding: 24px 0 40px; overflow-y: auto; }
+
+  /* ✨ animated logo: pops in and glows */
+  #menu h1 { animation: logoPop 0.6s cubic-bezier(.2,1.4,.4,1), logoGlow 2.6s ease-in-out infinite; }
+  @keyframes logoPop { 0% { transform: scale(0.4); opacity: 0; } 70% { transform: scale(1.12); } 100% { transform: scale(1); opacity: 1; } }
+  @keyframes logoGlow { 0%,100% { filter: drop-shadow(0 0 8px #22d3ee55); } 50% { filter: drop-shadow(0 0 26px #22d3eecc) drop-shadow(0 0 30px #f5a62366); } }
 
   /* 🏅 achievement toast that slides in from the top */
   #achToast { position: fixed; top: 14px; left: 50%; transform: translateX(-50%) translateY(-90px);
@@ -203,6 +208,7 @@
   <button class="btn" id="btnMechs">🤖 MECH STORE</button>
   <button class="btn" id="btnGuns">🔫 GUN STORE</button>
   <button class="btn" id="btnPets">🐾 PETS</button>
+  <button class="btn" id="btnDecos">🎩 DECORATE</button>
   <button class="btn" id="btnPacks">💎 BUY PACKS</button>
   <button class="btn" id="btnMaps">🗺️ MAPS</button>
   <button class="btn" id="btnRanks">🎖️ RANKS</button>
@@ -227,6 +233,14 @@
   <div class="statsRow"><span id="gunCoins">🪙 0</span></div>
   <div id="gunList" class="cardList"></div>
   <button class="btn" id="btnGunBack">⬅ BACK</button>
+</div>
+
+<!-- ================= DECORATE ================= -->
+<div id="decosScreen" class="screen hidden">
+  <h2>🎩 DECORATE YOUR MECH</h2>
+  <div class="statsRow"><span id="decoCoins">🪙 0</span></div>
+  <div id="decoList" class="cardList"></div>
+  <button class="btn" id="btnDecosBack">⬅ BACK</button>
 </div>
 
 <!-- ================= PETS ================= -->
@@ -307,6 +321,22 @@
     <div class="modeTitle">🗼 TOWER CLIMB</div>
     <div class="modeDesc">Climb ALONE, floor by floor — each floor has more enemies. Every 10th floor is a BOSS that drops a forever-power: damage, defense, or health!</div>
     <button class="btn" id="btnPlayTower">▶ CLIMB THE TOWER</button>
+  </div>
+  <div class="modeBox">
+    <div class="modeTitle">🧟 ZOMBIE HORDE</div>
+    <div class="modeDesc">ALONE against endless waves of fast zombies — tons of them, more every wave, with a giant BRUTE every 5th wave. How long can you last?</div>
+    <button class="btn" id="btnPlayZombie">▶ FIGHT THE HORDE</button>
+  </div>
+  <div class="modeBox">
+    <div class="modeTitle">👹 BOSS RUSH</div>
+    <div class="modeDesc">ALONE vs boss after boss after boss — each one tougher than the last. You heal between them. How many can you take down?</div>
+    <button class="btn" id="btnPlayRush">▶ START THE RUSH</button>
+  </div>
+  <div class="modeBox">
+    <div class="modeTitle">🚩 CAPTURE THE FLAG</div>
+    <div class="modeDesc">🔵 vs 🔴 — sneak into the enemy base, grab their flag, and run it home! First team to 3 captures wins. Everyone respawns.</div>
+    <div class="sliderRow"><input type="range" id="ctfSlider" min="1" max="15" value="4"><span id="ctfLabel">4 v 4</span></div>
+    <button class="btn" id="btnPlayCTF">▶ PLAY CAPTURE THE FLAG</button>
   </div>
   </div>
   <button class="btn" id="btnModeBack">⬅ BACK</button>
@@ -831,7 +861,9 @@ function freshSave() {
            gunsOwned: { pistol_common: 1 }, gunEquipped: "pistol_common",
            codesUsed: {}, mapIdx: 0,
            stats: { kills: 0, matches: 0, bossKills: 0, bestFloor: 0, coinsEarned: 0, timePlayed: 0 },
-           ach: {}, petsOwned: [], petEquipped: "none" };
+           ach: {}, petsOwned: [], petEquipped: "none",
+           records: { survival: 0, zombie: 0, bossrush: 0, kills: 0 },
+           decosOwned: [], decoEquipped: "none", lastDaily: "", dailyStreak: 0 };
 }
 let save;
 try { save = JSON.parse(localStorage.getItem(SAVE_KEY)); } catch (e) { save = null; }
@@ -842,6 +874,11 @@ if (!save.stats) save.stats = { kills: 0, matches: 0, bossKills: 0, bestFloor: 0
 if (!save.ach) save.ach = {};               // your unlocked achievements
 if (!save.petsOwned) save.petsOwned = [];   // 🐾 pets you've bought
 if (save.petEquipped == null) save.petEquipped = "none";
+if (!save.records) save.records = { survival: 0, zombie: 0, bossrush: 0, kills: 0 };
+if (!save.decosOwned) save.decosOwned = [];   // 🎩 decorations you own
+if (save.decoEquipped == null) save.decoEquipped = "none";
+if (save.lastDaily == null) save.lastDaily = "";
+if (save.dailyStreak == null) save.dailyStreak = 0;
 function persist() {
   // saving can fail in some browsers (private mode etc.) — never crash the game for it
   try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) {}
@@ -955,7 +992,7 @@ function sndFanfare(big) {
 let state = "menu";   // "menu" or "game" or "end"
 
 function showScreen(id) {
-  ["menu", "mechStore", "gunStore", "petsScreen", "packsScreen", "mapScreen", "modeScreen", "codesScreen", "ranksScreen", "awardsScreen", "endScreen"].forEach(s => $(s).classList.add("hidden"));
+  ["menu", "mechStore", "gunStore", "petsScreen", "decosScreen", "packsScreen", "mapScreen", "modeScreen", "codesScreen", "ranksScreen", "awardsScreen", "endScreen"].forEach(s => $(s).classList.add("hidden"));
   if (id) $(id).classList.remove("hidden");
 }
 function refreshLabels() {
@@ -982,10 +1019,12 @@ function goMenu() { state = "menu"; resetRestartBtn(); refreshLabels(); showScre
 // ---------- the STATS & AWARDS screen ----------
 function renderAwards() {
   const st = save.stats;
+  const rec = save.records;
   $("statsLine").innerHTML =
     "🎯 <b>" + st.kills + "</b> kills • 🎮 <b>" + st.matches + "</b> matches • 🏆 <b>" + save.wins + "</b> wins • 👹 <b>" +
-    st.bossKills + "</b> bosses • 🗼 best floor <b>" + st.bestFloor + "</b> • 🪙 <b>" + st.coinsEarned +
-    "</b> earned • ⏱ <b>" + Math.round(st.timePlayed / 60) + "</b> min played";
+    st.bossKills + "</b> bosses • 🪙 <b>" + st.coinsEarned + "</b> earned • ⏱ <b>" + Math.round(st.timePlayed / 60) + "</b> min<br>" +
+    '<span style="color:#f5c542">🏆 RECORDS — 🗼 tower floor <b>' + st.bestFloor + "</b> • 🌊 survival wave <b>" + rec.survival +
+    "</b> • 🧟 zombie wave <b>" + rec.zombie + "</b> • 👹 boss rush <b>" + rec.bossrush + "</b> • ⚔️ most kills <b>" + rec.kills + "</b></span>";
   const got = ACHS.filter(a => save.ach[a.id]).length;
   $("achCount").textContent = "🏅 " + got + " / " + ACHS.length + " unlocked";
   const list = $("achList");
@@ -1147,6 +1186,45 @@ function renderPets() {
 }
 $("btnPets").onclick = () => { sndClick(); renderPets(); showScreen("petsScreen"); };
 $("btnPetsBack").onclick = () => { sndClick(); goMenu(); };
+
+// 🎩 DECORATE store — buy hats & accessories, equip one at a time
+function renderDecos() {
+  refreshLabels();
+  $("decoCoins").textContent = "🪙 " + save.coins;
+  const list = $("decoList");
+  list.innerHTML = "";
+  for (const d of DECOS) {
+    const owned = d.id === "none" || save.decosOwned.includes(d.id);
+    const equipped = save.decoEquipped === d.id;
+    const card = document.createElement("div");
+    card.className = "card" + (equipped ? " equipped" : "");
+    card.style.borderColor = equipped ? "#22c55e" : "#3a4266";
+    card.innerHTML =
+      '<div class="cardName" style="font-size:20px">' + d.emoji + " " + d.name + '</div>' +
+      '<div class="row"></div>';
+    const row = card.querySelector(".row");
+    if (equipped) {
+      row.innerHTML = '<div class="equippedTag">✔ EQUIPPED</div>';
+    } else if (owned) {
+      const eq = document.createElement("button");
+      eq.className = "btn"; eq.textContent = "EQUIP";
+      eq.onclick = () => { sndClick(); save.decoEquipped = d.id; persist(); renderDecos(); };
+      row.appendChild(eq);
+    } else {
+      const buy = document.createElement("button");
+      buy.className = "btn"; buy.textContent = "BUY — " + d.price + " 🪙";
+      buy.disabled = save.coins < d.price;
+      buy.onclick = () => {
+        save.coins -= d.price; save.decosOwned.push(d.id); save.decoEquipped = d.id;
+        persist(); sndFanfare(true); renderDecos();
+      };
+      row.appendChild(buy);
+    }
+    list.appendChild(card);
+  }
+}
+$("btnDecos").onclick = () => { sndClick(); renderDecos(); showScreen("decosScreen"); };
+$("btnDecosBack").onclick = () => { sndClick(); goMenu(); };
 
 // =====================================================================
 //  🔒 THE REALLY REALLY SECRET BUTTON — click the "M" of MECH ROYALE.
@@ -1315,18 +1393,24 @@ function syncModeLabels() {
   $("bossLabel").textContent = "You + " + (+$("bossSlider").value - 1) + " allies";
   $("survLabel").textContent = "You + " + (+$("survSlider").value - 1) + " allies";
   $("ggLabel").textContent = (+$("ggSlider").value) + " players";
+  const c = +$("ctfSlider").value;
+  $("ctfLabel").textContent = c + " v " + c;
 }
 $("ffaSlider").addEventListener("input", syncModeLabels);
 $("teamSlider").addEventListener("input", syncModeLabels);
 $("bossSlider").addEventListener("input", syncModeLabels);
 $("survSlider").addEventListener("input", syncModeLabels);
 $("ggSlider").addEventListener("input", syncModeLabels);
+$("ctfSlider").addEventListener("input", syncModeLabels);
 $("btnPlayFFA").onclick   = () => { sndClick(); startMatch({ mode: "ffa",      size: +$("ffaSlider").value }); };
 $("btnPlayTeams").onclick = () => { sndClick(); startMatch({ mode: "teams",    size: +$("teamSlider").value }); };
 $("btnPlayBoss").onclick  = () => { sndClick(); startMatch({ mode: "boss",     size: +$("bossSlider").value }); };
 $("btnPlaySurv").onclick  = () => { sndClick(); startMatch({ mode: "survival", size: +$("survSlider").value }); };
 $("btnPlayGG").onclick    = () => { sndClick(); startMatch({ mode: "gungame",  size: +$("ggSlider").value }); };
 $("btnPlayTower").onclick = () => { sndClick(); startMatch({ mode: "tower",    size: 1 }); };
+$("btnPlayZombie").onclick = () => { sndClick(); startMatch({ mode: "zombie",   size: 1 }); };
+$("btnPlayRush").onclick   = () => { sndClick(); startMatch({ mode: "bossrush", size: 1 }); };
+$("btnPlayCTF").onclick    = () => { sndClick(); startMatch({ mode: "ctf",      size: +$("ctfSlider").value }); };
 $("btnModeBack").onclick  = () => { sndClick(); goMenu(); };
 
 // ---------- map select (30 maps + a random option) ----------
@@ -1809,6 +1893,23 @@ const PETS = [
 const petDef = id => PETS.find(p => p.id === id) || PETS[0];
 let pet = null;   // the pet entity that follows you in a match
 
+// 🎩 DECORATIONS — dress up your mech! (drawn on top of your mech in matches)
+const DECOS = [
+  { id: "none",    emoji: "🚫", name: "None",       price: 0 },
+  { id: "cap",     emoji: "🧢", name: "Cap",        price: 1500 },
+  { id: "bow",     emoji: "🎀", name: "Bow",        price: 2000 },
+  { id: "sunhat",  emoji: "👒", name: "Sun Hat",    price: 2500 },
+  { id: "grad",    emoji: "🎓", name: "Grad Cap",   price: 3000 },
+  { id: "tophat",  emoji: "🎩", name: "Top Hat",    price: 4000 },
+  { id: "glasses", emoji: "🕶️", name: "Sunglasses", price: 5000 },
+  { id: "phones",  emoji: "🎧", name: "Headphones", price: 6000 },
+  { id: "crown",   emoji: "👑", name: "Crown",      price: 10000 },
+  { id: "star",    emoji: "⭐", name: "Star",       price: 12000 },
+  { id: "fire",    emoji: "🔥", name: "On Fire",    price: 18000 },
+  { id: "diamond", emoji: "💎", name: "Diamond",    price: 30000 },
+];
+const decoDef = id => DECOS.find(d => d.id === id) || DECOS[0];
+
 function activateSuper() {
   if (!player || !player.alive || player.superChg < 1) return;
   player.superChg = 0;
@@ -1862,6 +1963,7 @@ function botGun(boost) {
 // mode = "ffa" (everyone solo) or "teams"; size = players per team (teams) or total players (ffa)
 let matchMode = "ffa", matchTeamSize = 0, lastCfg = { mode: "ffa", size: 6 }, difficulty = 0, matchTotal = 0;
 let wave = 0, waveDelay = 0, wavePending = false, gungameWinner = null;
+let flags = [], ctfScore = { A: 0, B: 0 }, ctfTarget = 3;   // 🚩 Capture the Flag state
 let towerChoosing = false;   // 🗼 true while you're picking a boss power (game frozen)
 
 // 🔫 GUN GAME ladder — every kill moves you to the next gun.
@@ -1893,9 +1995,10 @@ function botNameFor() {
 
 function startMatch(cfg) {
   cfg = cfg || lastCfg;
-  const validModes = ["ffa", "teams", "boss", "survival", "gungame", "tower"];
+  const validModes = ["ffa", "teams", "boss", "survival", "gungame", "tower", "zombie", "bossrush", "ctf"];
   matchMode = validModes.includes(cfg.mode) ? cfg.mode : "ffa";
-  const size = matchMode === "tower" ? 1   // the tower is a SOLO climb
+  const solo = matchMode === "tower" || matchMode === "zombie" || matchMode === "bossrush";
+  const size = solo ? 1   // the tower / zombie / boss-rush are SOLO
              : clamp(Math.round(cfg.size) || 6, (matchMode === "ffa" || matchMode === "gungame") ? 2 : 1, 50);
   matchTeamSize = size;
   lastCfg = { mode: matchMode, size };
@@ -1904,7 +2007,10 @@ function startMatch(cfg) {
   const total = matchMode === "teams" ? size * 2
               : matchMode === "boss" ? size + numBosses
               : matchMode === "survival" ? size + 6   // waves keep coming, so count some extra
+              : matchMode === "ctf" ? size * 2
               : matchMode === "tower" ? 6
+              : matchMode === "zombie" ? 24    // the horde is huge
+              : matchMode === "bossrush" ? 10
               : size;
   difficulty = rankIndexFor(save.wins);      // higher rank = tougher enemies AND more coins
   matchTotal = total;                        // remembered for the War Hero achievement
@@ -1928,7 +2034,8 @@ function startMatch(cfg) {
   const rightReg = { x0: WORLD.w * 0.6, x1: WORLD.w - 60, y0: 60, y1: WORLD.h - 60 };
 
   // you — team "A" in team/boss/survival mode, or your own solo team in FFA
-  const onTeam = matchMode === "teams" || matchMode === "boss" || matchMode === "survival";
+  const onTeam = matchMode === "teams" || matchMode === "boss" || matchMode === "survival"
+              || matchMode === "zombie" || matchMode === "bossrush" || matchMode === "ctf";
   const myMech = MECHS[save.mechEquipped];
   const pr = 15 + Math.round(myMech.hp / 50);
   const pSpot = findSpot(pr, null, 0, onTeam ? leftReg : null);
@@ -1973,6 +2080,19 @@ function startMatch(cfg) {
   } else if (matchMode === "tower") {
     // solo climb — the floor's enemies arrive through nextFloor()
     player.towerDmg = 1; player.towerDef = 1;
+  } else if (matchMode === "zombie") {
+    // 🧟 solo — the endless horde arrives through spawnZombieWave()
+  } else if (matchMode === "bossrush") {
+    // 👹 solo — the endless bosses arrive through spawnBossRush()
+  } else if (matchMode === "ctf") {
+    for (let i = 0; i < size - 1; i++) addBot("A", leftReg, false);   // your 🔵 blue team
+    for (let i = 0; i < size; i++)     addBot("B", rightReg, true);   // the 🔴 red team
+    // give every bot a job: half attack (grab the flag), half defend (guard base)
+    ["A", "B"].forEach(t => bots.filter(x => x.team === t).forEach((x, i) => {
+      x.role = (i % 2 === 0) ? "att" : "def";
+      x.guardOff = (i * 53 % 160) - 80; x.guardOff2 = (i * 71 % 200) - 100;
+    }));
+    setupFlags();
   } else {
     for (let i = 0; i < size - 1; i++) addBot("ffa" + i, null, true); // everyone for themselves (buffed)
   }
@@ -1992,6 +2112,7 @@ function startMatch(cfg) {
   squadOrder = null; chatLog = []; chatHinted = false; closeChat();
   powerups = []; powerT = 8;
   wave = 0; waveDelay = 1.5; wavePending = false; gungameWinner = null;
+  ctfScore = { A: 0, B: 0 };
   towerChoosing = false; $("towerPanel").classList.add("hidden");
   nameDeck = [];   // fresh shuffle of bot names every match
   moveStick = null; aimStick = null; dashPressed = false;
@@ -2001,6 +2122,9 @@ function startMatch(cfg) {
                 : matchMode === "survival" ? " — 🌊 SURVIVAL — outlast all 10 waves!"
                 : matchMode === "gungame" ? " — 🔫 GUN GAME — first to kill with all " + GUNGAME_LADDER.length + " guns wins!"
                 : matchMode === "tower" ? " — 🗼 TOWER CLIMB — how high can you get?"
+                : matchMode === "zombie" ? " — 🧟 ZOMBIE HORDE — survive as long as you can!"
+                : matchMode === "bossrush" ? " — 👹 BOSS RUSH — how many bosses can you beat?"
+                : matchMode === "ctf" ? " — 🚩 CAPTURE THE FLAG — first team to " + ctfTarget + " grabs wins!"
                 : " — " + size + "-player FREE FOR ALL — GO!";
   banner("🗺️ " + curMap.name + modeMsg, "#22d3ee");
   if (curMap.hazard) banner("⚡ BONUS MAP — watch out, it shoots bullets!", "#ffca3a");
@@ -2098,6 +2222,134 @@ function pickTowerPower(kind) {
 $("twDmg").onclick = () => pickTowerPower("dmg");
 $("twDef").onclick = () => pickTowerPower("def");
 $("twHp").onclick  = () => pickTowerPower("hp");
+
+// 🧟 ZOMBIE HORDE: endless waves of LOTS of weak, fast zombies (a big one every 5th wave)
+function spawnZombieWave() {
+  bots = bots.filter(b => b.alive && b.team === player.team);   // clear the old wrecks
+  const n = Math.min(4 + wave * 2, 32);   // the horde grows every wave
+  for (let i = 0; i < n; i++) {
+    const m = MECHS[botMechIdx(0)];   // weak mechs
+    const s = findSpot(16, player, 480);
+    const b = makeFighter(s.x, s.y, m, botGun(0), false, "🧟 Zombie", "B");
+    b.maxHp = Math.round(38 + wave * 7); b.hp = b.maxHp;   // fragile, but tankier over time
+    b.speed *= 1.15 + wave * 0.02;   // FAST — and getting faster
+    b.aimErr = 0.5;                  // terrible aim — they just rush you
+    b.isZombie = true;
+    bots.push(b);
+  }
+  if (wave % 5 === 0) {   // 🧟 BRUTE — a big tanky zombie
+    const m = MECHS[botMechIdx(Math.min(Math.floor(wave / 3), 12))];
+    const s = findSpot(46, player, 620);
+    const b = makeFighter(s.x, s.y, m, botGun(4), false, "🧟 BRUTE", "B");
+    b.isBoss = true; b.isZombie = true; b.r = 46;
+    b.maxHp = Math.round(280 + wave * 55); b.hp = b.maxHp;
+    b.speed *= 0.95; b.aimErr = 0.35;
+    bots.push(b);
+  }
+  banner("🧟 WAVE " + wave + " — the horde is here!" + (wave % 5 === 0 ? " 👹 BRUTE!" : ""), "#8ef58e");
+  if (player.alive && wave > 1) player.hp = Math.min(player.maxHp, player.hp + player.maxHp * 0.22);
+}
+
+// 👹 BOSS RUSH: one boss at a time, back-to-back, each one tougher than the last
+function spawnBossRush() {
+  bots = bots.filter(b => b.alive && b.team === player.team);
+  const legs = MECHS.filter(m => m.rarity === "legendary");
+  const bGuns = ["cannon", "minigun", "plasma", "rocket"];
+  const m = legs[Math.floor(Math.random() * legs.length)];
+  const s = findSpot(52, player, 640);
+  const b = makeFighter(s.x, s.y, m, { type: bGuns[Math.floor(Math.random() * bGuns.length)], rarity: "legendary", level: 1 }, false, "👹 BOSS " + wave, "B");
+  b.isBoss = true; b.r = clamp(44 + wave * 2, 44, 92);
+  b.maxHp = Math.round(m.hp * (6 + wave * 1.6) * (1 + difficulty * 0.5)); b.hp = b.maxHp;
+  b.speed *= 0.7; b.aimErr = clamp(0.16 - wave * 0.004, 0.05, 0.16);
+  bots.push(b);
+  banner("👹 BOSS " + wave + " — good luck!", "#ff8a8a");
+  if (player.alive && wave > 1) player.hp = Math.min(player.maxHp, player.hp + player.maxHp * 0.45);   // patch up between bosses
+}
+
+// 🚩 CAPTURE THE FLAG — set the two flags at each team's base
+function setupFlags() {
+  const blueHome = { x: 130, y: WORLD.h / 2 };
+  const redHome  = { x: WORLD.w - 130, y: WORLD.h / 2 };
+  flags = [
+    { team: "A", emoji: "🔵", home: blueHome, x: blueHome.x, y: blueHome.y, carrier: null, atHome: true, color: "#3b82f6" },
+    { team: "B", emoji: "🔴", home: redHome,  x: redHome.x,  y: redHome.y,  carrier: null, atHome: true, color: "#ef4444" },
+  ];
+}
+
+// runs every frame in CTF: carry flags, grab/return them, and score captures
+function updateFlags(dt) {
+  // a carried flag rides above its carrier (and drops if the carrier dies)
+  for (const fl of flags) {
+    if (fl.carrier) {
+      if (!fl.carrier.alive) {
+        fl.x = fl.carrier.x; fl.y = fl.carrier.y; fl.carrier = null; fl.atHome = false;
+        floaty(fl.x, fl.y - 30, "🚩 dropped!", fl.color);
+      } else { fl.x = fl.carrier.x; fl.y = fl.carrier.y - fl.carrier.r - 16; }
+    }
+  }
+  // fighters touching flags: return your own, grab the enemy's
+  for (const f of fighters()) {
+    if (!f.alive) continue;
+    for (const fl of flags) {
+      if (fl.carrier) continue;
+      if (Math.hypot(f.x - fl.x, f.y - fl.y) > f.r + 26) continue;
+      if (fl.team === f.team) {
+        if (!fl.atHome) {   // touch your own dropped flag to send it home
+          fl.x = fl.home.x; fl.y = fl.home.y; fl.atHome = true;
+          if (f.team === player.team) banner("🏠 Your flag is back home!", fl.color);
+        }
+      } else {             // grab the enemy flag and run!
+        fl.carrier = f; fl.atHome = false;
+        if (f.isPlayer) banner("🚩 You grabbed the flag — RUN HOME!", fl.color);
+        else if (f.team === player.team) banner("🚩 " + f.name + " grabbed the enemy flag!", fl.color);
+        else banner("⚠ " + f.name + " took your flag!", "#ff9b9b");
+      }
+    }
+  }
+  // score: carry the enemy flag back to your own base
+  for (const fl of flags) {
+    if (!fl.carrier) continue;
+    const c = fl.carrier;
+    const myBase = c.team === "A" ? flags[0].home : flags[1].home;
+    if (Math.hypot(c.x - myBase.x, c.y - myBase.y) < c.r + 44) {
+      ctfScore[c.team] = (ctfScore[c.team] || 0) + 1;
+      fl.carrier = null; fl.atHome = true; fl.x = fl.home.x; fl.y = fl.home.y;   // flag returns to its base
+      const mine = c.team === player.team;
+      sndFanfare(mine);
+      banner((mine ? "🎉 YOUR TEAM SCORED!  " : "😱 Red team scored!  ") + "🔵 " + ctfScore.A + " — " + ctfScore.B + " 🔴", mine ? "#7CFC98" : "#ff9b9b");
+      if (c.isPlayer) { bonusCoins += 200; floaty(c.x, c.y - 44, "🚩 CAPTURE +200 🪙", "#f5c542"); }
+    }
+  }
+}
+
+// CTF bot brain: attackers chase the enemy flag, defenders guard/return; everyone still shoots
+function updateCtfBot(b, dt) {
+  b.cooldown -= dt;
+  let target = null, bestD = Infinity;
+  for (const f of fighters()) { if (!f.alive || f.team === b.team) continue; const d = dist(b, f); if (d < bestD) { bestD = d; target = f; } }
+  const canFight = target && bestD < 560 && canSee(b, target);
+  if (canFight) { b.aim = Math.atan2(target.y - b.y, target.x - b.x) + (Math.random() - 0.5) * b.aimErr; tryShoot(b, b.aim); }
+
+  const myFlag = flags.find(f => f.team === b.team);
+  const enemyFlag = flags.find(f => f.team !== b.team);
+  let gx, gy;
+  if (enemyFlag.carrier === b) {                       // I'm carrying — sprint home!
+    gx = myFlag.home.x; gy = myFlag.home.y;
+  } else if (b.role === "def") {
+    if (!myFlag.atHome && !myFlag.carrier) { gx = myFlag.x; gy = myFlag.y; }        // go grab our dropped flag
+    else if (myFlag.carrier) { gx = myFlag.carrier.x; gy = myFlag.carrier.y; }      // chase the thief
+    else { gx = myFlag.home.x + b.guardOff; gy = myFlag.home.y + b.guardOff2; }     // guard our base
+  } else {
+    if (enemyFlag.carrier && enemyFlag.carrier.team === b.team) { gx = enemyFlag.carrier.x; gy = enemyFlag.carrier.y; }   // escort our carrier
+    else { gx = enemyFlag.x; gy = enemyFlag.y; }                                     // go for the flag
+  }
+  const d = Math.hypot(gx - b.x, gy - b.y);
+  if (d > 22) {
+    const a = Math.atan2(gy - b.y, gx - b.x);
+    moveFighter(b, Math.cos(a) * b.speed * 0.82 * dt, Math.sin(a) * b.speed * 0.82 * dt);
+    if (!canFight) b.aim = a;
+  }
+}
 
 function banner(txt, color = "#fff") { banners.unshift({ txt, color, life: 3 }); banners = banners.slice(0, 4); }
 function floaty(x, y, txt, color = "#fff") { floaties.push({ x, y, txt, color, life: 1 }); }
@@ -2215,6 +2467,7 @@ function hurt(f, dmg, killer) {
     // 🔫 GUN GAME: every kill climbs the killer to the next gun; a kill with the LAST gun wins!
     // (runs AFTER the kill-credit above so the winning kill's coins get banked too.
     //  No "alive" check — a rocket fired before you died still counts when it lands!)
+    if (matchMode === "ctf") f.respawnT = 4;   // 🚩 respawn back at base — CTF is about flags, not kills
     if (matchMode === "gungame") {
       f.respawnT = 3;   // nobody stays dead in Gun Game
       if (killer) {
@@ -2236,6 +2489,7 @@ function hurt(f, dmg, killer) {
 function updateBot(b, dt) {
   b.cooldown -= dt;
   if (b.frozenT > 0) { b.frozenT -= dt; b.hitFlash = 0.1; return; }   // ❄️ frozen — can't move or shoot
+  if (matchMode === "ctf") { updateCtfBot(b, dt); return; }           // 🚩 flag-focused brain
   // nearest enemy by distance — cheap, no line-of-sight yet (keeps big battles fast)
   let target = null, bestD = Infinity;
   for (const f of fighters()) {
@@ -2315,10 +2569,14 @@ function endMatch(won, leftEarly) {
       : won ? (matchMode === "survival" ? "🏆 YOU SURVIVED ALL 10 WAVES!"
                : matchMode === "gungame" ? "🏆 GUN GAME CHAMPION!"
                : matchMode === "tower" ? "🏆 EPIC CLIMB — floor " + wave + "!"
+               : matchMode === "ctf" ? "🏆 FLAG VICTORY! 🔵 " + ctfScore.A + " — " + ctfScore.B + " 🔴"
                : "🏆 VICTORY!")
       : (matchMode === "gungame" && gungameWinner ? "💥 " + gungameWinner + " won the Gun Game"
          : matchMode === "survival" ? "🌊 You fell on wave " + wave
          : matchMode === "tower" ? "🗼 You reached floor " + wave
+         : matchMode === "zombie" ? "🧟 The horde got you — you survived " + Math.max(0, wave - 1) + " waves!"
+         : matchMode === "bossrush" ? "👹 You beat " + Math.max(0, wave - 1) + " bosses!"
+         : matchMode === "ctf" ? "🚩 DEFEAT — 🔵 " + ctfScore.A + " — " + ctfScore.B + " 🔴"
          : matchMode === "teams" ? "💥 DEFEAT — your team lost"
          : matchMode === "boss" ? "💥 DEFEAT — the bosses won"
          : "💥 You placed #" + place);
@@ -2332,6 +2590,9 @@ function endMatch(won, leftEarly) {
       (matchMode === "survival" ? "🌊 Waves cleared: " + Math.max(0, wave - 1) + " / 10<br>" : "") +
       (matchMode === "gungame" ? "🔫 Gun ladder: " + Math.min((player.ladderIdx || 0) + 1, GUNGAME_LADDER.length) + " / " + GUNGAME_LADDER.length + "<br>" : "") +
       (matchMode === "tower" ? "🗼 Floors cleared: " + Math.max(0, wave - 1) + "<br>" : "") +
+      (matchMode === "zombie" ? "🧟 Waves survived: " + Math.max(0, wave - 1) + "<br>" : "") +
+      (matchMode === "bossrush" ? "👹 Bosses beaten: " + Math.max(0, wave - 1) + "<br>" : "") +
+      (matchMode === "ctf" ? "🚩 Final score: 🔵 " + ctfScore.A + " — " + ctfScore.B + " 🔴<br>" : "") +
       "🎯 Kills: " + matchKills + " → +" + (matchKills * killCoins()) + " 🪙<br>" +
       "🎮 Played: +" + playCoins() + " 🪙<br>" +
       (won ? "🏆 Win bonus: +" + winCoins() + " 🪙<br>" : "") +
@@ -2369,6 +2630,12 @@ function endMatch(won, leftEarly) {
     if (won && matchMode === "gungame") ach("gunMaster");
     if (won && matchMode === "survival") ach("surviveAll");
     if (matchTotal >= 60) ach("bigBattle");
+    // 🏆 personal records
+    const rec = save.records;
+    if (matchMode === "survival" && (wave - 1) > rec.survival) rec.survival = wave - 1;
+    if (matchMode === "zombie"   && (wave - 1) > rec.zombie)   rec.zombie = wave - 1;
+    if (matchMode === "bossrush" && (wave - 1) > rec.bossrush) rec.bossrush = wave - 1;
+    if (matchKills > rec.kills) rec.kills = matchKills;
     checkMeta();
     persist();
     refreshLabels();
@@ -2597,6 +2864,52 @@ function update(dt) {
       if (waveDelay <= 0) { wavePending = false; nextFloor(); }
     }
     if (!player.alive) endMatch(wave > 10);   // getting past the first boss counts as a WIN
+  } else if (matchMode === "zombie") {
+    // 🧟 endless horde — clear a wave, the next (bigger) one comes; you lose when you fall
+    const enemiesLeft = bots.some(b => b.alive && b.team !== player.team);
+    if (!enemiesLeft && !wavePending) {
+      if (wave > 0) {
+        const bonus = Math.round(10 * wave * matchCoinMult);
+        bonusCoins += bonus;
+        floaty(player.x, player.y - 44, "🧟 wave " + wave + " +" + bonus + " 🪙", "#8ef58e");
+        sndCoin();
+      }
+      wave++;
+      wavePending = true;
+      waveDelay = wave === 1 ? 1.2 : 2.5;
+    }
+    if (wavePending) { waveDelay -= dt; if (waveDelay <= 0) { wavePending = false; spawnZombieWave(); } }
+    if (!player.alive) endMatch(false);
+  } else if (matchMode === "bossrush") {
+    // 👹 endless bosses, one after another
+    const enemiesLeft = bots.some(b => b.alive && b.team !== player.team);
+    if (!enemiesLeft && !wavePending) {
+      if (wave > 0) {
+        const bonus = Math.round(45 * wave * matchCoinMult);
+        bonusCoins += bonus;
+        floaty(player.x, player.y - 44, "👹 boss " + wave + " down +" + bonus + " 🪙", "#ff8a8a");
+        sndCoin();
+      }
+      wave++;
+      wavePending = true;
+      waveDelay = wave === 1 ? 1.2 : 2.5;
+    }
+    if (wavePending) { waveDelay -= dt; if (waveDelay <= 0) { wavePending = false; spawnBossRush(); } }
+    if (!player.alive) endMatch(false);
+  } else if (matchMode === "ctf") {
+    // 🚩 nobody stays dead — respawn at your base after 4s
+    for (const f of fighters()) if (!f.alive && f.respawnT != null) {
+      f.respawnT -= dt;
+      if (f.respawnT <= 0) {
+        const home = (f.team === "A" ? flags[0] : flags[1]).home;
+        f.x = home.x + (f.guardOff || 0) + 30; f.y = home.y + (f.guardOff2 || 0);
+        f.hp = f.maxHp; f.alive = true; f.respawnT = null; f.hitFlash = 0;
+        if (f.isPlayer) { banner("🔁 Respawned at base!", "#7ce0ff"); cam.x = f.x - canvas.width / 2; cam.y = f.y - canvas.height / 2; }
+      }
+    }
+    updateFlags(dt);
+    if (ctfScore.A >= ctfTarget) { endMatch(true); return; }
+    if (ctfScore.B >= ctfTarget) { endMatch(false); return; }
   } else {
     const enemyAlive = bots.some(b => b.alive && b.team !== player.team);
     if (!enemyAlive) endMatch(true);
@@ -2651,6 +2964,13 @@ function drawMech(f) {
   if (f.isBoss) {
     ctx.strokeStyle = "rgba(255,60,60," + (0.5 + 0.3 * Math.sin(gameTime * 5)) + ")"; ctx.lineWidth = 4;
     ctx.beginPath(); ctx.arc(f.x, f.y, f.r + 7, 0, 7); ctx.stroke();
+  }
+  // 🎩 your equipped decoration, worn on top of your mech
+  if (f.isPlayer && save.decoEquipped !== "none") {
+    const sz = Math.round(f.r * 1.5);
+    ctx.font = sz + "px Arial"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText(decoDef(save.decoEquipped).emoji, f.x, f.y - f.r * 0.5);
+    ctx.textBaseline = "alphabetic";
   }
   // name + health bar floating above
   ctx.fillStyle = f.isPlayer ? "#22d3ee" : (friend ? "#7CFC98" : "#ff9b9b");
@@ -2793,6 +3113,22 @@ function draw() {
     ctx.fillStyle = "#22c55e";
     ctx.fillRect(pk.x - 3, pk.y - 9 + bob, 6, 18);
     ctx.fillRect(pk.x - 9, pk.y - 3 + bob, 18, 6);
+  }
+
+  // 🚩 CTF flags + glowing base rings
+  if (matchMode === "ctf") for (const fl of flags) {
+    // base ring (where this flag lives / must be brought)
+    ctx.strokeStyle = fl.color; ctx.globalAlpha = 0.5; ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.arc(fl.home.x, fl.home.y, 46, 0, 7); ctx.stroke();
+    ctx.globalAlpha = 0.12; ctx.fillStyle = fl.color;
+    ctx.beginPath(); ctx.arc(fl.home.x, fl.home.y, 46, 0, 7); ctx.fill();
+    ctx.globalAlpha = 1;
+    // the flag itself (bobs; sits above its carrier if held)
+    const bob = fl.carrier ? 0 : Math.sin(gameTime * 3) * 4;
+    ctx.font = "30px Arial"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText("🚩", fl.x, fl.y + bob);
+    ctx.beginPath(); ctx.arc(fl.x + 8, fl.y - 8 + bob, 5, 0, 7); ctx.fillStyle = fl.color; ctx.fill();
+    ctx.textBaseline = "alphabetic";
   }
 
   // bullets — each gun type looks like its name
@@ -2957,20 +3293,28 @@ function draw() {
   } else if (matchMode === "tower") {
     const foes = fighters().filter(f => f.alive && f.team !== player.team).length;
     ctx.fillText("🗼 FLOOR " + Math.max(1, wave) + " — 👾 " + foes, canvas.width - 20, 84);
+  } else if (matchMode === "zombie") {
+    const foes = fighters().filter(f => f.alive && f.team !== player.team).length;
+    ctx.fillText("🧟 WAVE " + Math.max(1, wave) + " — 👾 " + foes + " left", canvas.width - 20, 84);
+  } else if (matchMode === "bossrush") {
+    ctx.fillText("👹 BOSS " + Math.max(1, wave), canvas.width - 20, 84);
+  } else if (matchMode === "ctf") {
+    ctx.fillText("🚩 🔵 " + ctfScore.A + " — " + ctfScore.B + " 🔴  (to " + ctfTarget + ")", canvas.width - 20, 84);
   } else {
     const alive = fighters().filter(f => f.alive).length;
     ctx.fillText("🤖 " + alive + " LEFT", canvas.width - 20, 84);
   }
 
-  // big MEGA BOSS health bar across the top
-  if (matchMode === "boss") {
+  // big BOSS health bar across the top (boss fight, boss rush, and zombie brutes)
+  if (matchMode === "boss" || matchMode === "bossrush" || matchMode === "zombie") {
     const boss = bots.find(b => b.isBoss && b.alive);
     if (boss) {
       const bw = Math.min(580, canvas.width - 90), bx = (canvas.width - bw) / 2, by = 46;
       ctx.fillStyle = "rgba(0,0,0,0.55)"; ctx.fillRect(bx - 2, by - 2, bw + 4, 22);
       ctx.fillStyle = "#ef4444"; ctx.fillRect(bx, by, bw * clamp(boss.hp / boss.maxHp, 0, 1), 18);
       ctx.fillStyle = "#fff"; ctx.font = "bold 13px Arial"; ctx.textAlign = "center";
-      ctx.fillText("👹 MEGA BOSS   " + Math.ceil(Math.max(0, boss.hp)) + " / " + boss.maxHp, canvas.width / 2, by + 13);
+      const label = matchMode === "bossrush" ? "👹 BOSS " + wave : (boss.isZombie ? "🧟 BRUTE" : "👹 MEGA BOSS");
+      ctx.fillText(label + "   " + Math.ceil(Math.max(0, boss.hp)) + " / " + boss.maxHp, canvas.width / 2, by + 13);
     }
   }
 
@@ -3166,6 +3510,25 @@ requestAnimationFrame(tick);
 
 // if anything else ever goes wrong, show it on screen so it can be reported
 window.addEventListener("error", e => banner("⚠ Bug: " + e.message, "#ef4444"));
+
+// 🎁 DAILY REWARD — free coins once per day, bigger the more days in a row!
+function checkDaily() {
+  try {
+    const d = new Date();
+    const key = d.getFullYear() + "-" + d.getMonth() + "-" + d.getDate();
+    if (save.lastDaily === key) return;
+    // was yesterday? keep the streak going, else start over
+    const y = new Date(d.getTime() - 86400000);
+    const yKey = y.getFullYear() + "-" + y.getMonth() + "-" + y.getDate();
+    save.dailyStreak = (save.lastDaily === yKey) ? Math.min(save.dailyStreak + 1, 7) : 1;
+    save.lastDaily = key;
+    const reward = 500 * save.dailyStreak;
+    save.coins += reward;
+    persist();
+    setTimeout(() => achToast("🎁 Daily reward — day " + save.dailyStreak + "! +" + reward + " 🪙"), 400);
+  } catch (e) {}
+}
+checkDaily();
 
 // show the menu when the page opens
 goMenu();
