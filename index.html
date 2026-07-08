@@ -925,15 +925,16 @@ try { save = JSON.parse(localStorage.getItem(SAVE_KEY)); } catch (e) { save = nu
 if (!save || !save.mechsOwned) save = freshSave();
 if (!save.codesUsed) save.codesUsed = {};   // remembers which secret codes you already used
 if (save.mapIdx == null) save.mapIdx = 0;   // which map you picked (-1 = random each match)
-if (!save.stats) save.stats = { kills: 0, matches: 0, bossKills: 0, bestFloor: 0, coinsEarned: 0, timePlayed: 0 };
+save.stats = Object.assign({ kills: 0, matches: 0, bossKills: 0, bestFloor: 0, coinsEarned: 0, timePlayed: 0 }, save.stats);   // backfill any missing fields (old saves)
 if (!save.ach) save.ach = {};               // your unlocked achievements
 if (!save.petsOwned) save.petsOwned = [];   // 🐾 pets you've bought
 if (save.petEquipped == null) save.petEquipped = "none";
-if (!save.records) save.records = { survival: 0, zombie: 0, bossrush: 0, kills: 0 };
+save.records = Object.assign({ survival: 0, zombie: 0, bossrush: 0, kills: 0 }, save.records);   // backfill any missing fields (old saves)
 if (!save.decosOwned) save.decosOwned = [];   // 🎩 decorations you own
 if (save.decoEquipped == null) save.decoEquipped = "none";
 if (save.lastDaily == null) save.lastDaily = "";
 if (save.dailyStreak == null) save.dailyStreak = 0;
+if (save.mechEquipped == null || !MECHS[save.mechEquipped]) save.mechEquipped = 0;   // never point at a missing mech
 function persist() {
   // saving can fail in some browsers (private mode etc.) — never crash the game for it
   try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) {}
@@ -1427,7 +1428,7 @@ updateAdBtn();
 // 📺 random pop-up ads while you're browsing the menu (turned off by the No-Ads perk)
 let popAdT = 100;
 setInterval(() => {
-  if (save.noAds || adPlaying || state !== "menu") return;   // never mid-game, never if No Ads
+  if (save.noAds || adPlaying || state !== "menu" || $("menu").classList.contains("hidden")) return;   // only on the visible main menu — never over a store/dialog
   popAdT -= 1;
   if (popAdT <= 0) { popAdT = 100 + Math.random() * 70; playAd("A quick ad while you wait…", "Back in", null); }
 }, 1000);
@@ -1970,6 +1971,7 @@ const decoDef = id => DECOS.find(d => d.id === id) || DECOS[0];
 
 function activateSuper() {
   if (!player || !player.alive || player.superChg < 1) return;
+  if (paused || chatOpen || towerChoosing || state !== "game") return;   // no firing while the fight is frozen
   player.superChg = 0;
   const s = SUPERS.find(x => x.id === player.superId) || SUPERS[0];
   banner("⚡ SUPER: " + s.emoji + " " + s.name + "!", "#22d3ee");
@@ -2604,7 +2606,7 @@ function updateBot(b, dt) {
     }
   }
 
-  if (target && (bestD < 1150 || ((matchMode === "survival" || matchMode === "tower") && b.team !== player.team))) {
+  if (target && (bestD < 1150 || ((matchMode === "survival" || matchMode === "tower" || matchMode === "zombie" || matchMode === "bossrush") && b.team !== player.team))) {
     const a = Math.atan2(target.y - b.y, target.x - b.x);
     // strafe side to side, get closer if far, back off if too close
     let mx = Math.cos(a + Math.PI / 2 * b.strafeDir), my = Math.sin(a + Math.PI / 2 * b.strafeDir);
@@ -3384,15 +3386,17 @@ function draw() {
     ctx.fillText("🤖 " + alive + " LEFT", canvas.width - 20, 84);
   }
 
-  // big BOSS health bar across the top (boss fight, boss rush, and zombie brutes)
-  if (matchMode === "boss" || matchMode === "bossrush" || matchMode === "zombie") {
+  // big BOSS health bar across the top (boss fight, boss rush, zombie brutes, survival wave bosses)
+  if (matchMode === "boss" || matchMode === "bossrush" || matchMode === "zombie" || matchMode === "survival") {
     const boss = bots.find(b => b.isBoss && b.alive);
     if (boss) {
       const bw = Math.min(580, canvas.width - 90), bx = (canvas.width - bw) / 2, by = 46;
       ctx.fillStyle = "rgba(0,0,0,0.55)"; ctx.fillRect(bx - 2, by - 2, bw + 4, 22);
       ctx.fillStyle = "#ef4444"; ctx.fillRect(bx, by, bw * clamp(boss.hp / boss.maxHp, 0, 1), 18);
       ctx.fillStyle = "#fff"; ctx.font = "bold 13px Arial"; ctx.textAlign = "center";
-      const label = matchMode === "bossrush" ? "👹 BOSS " + wave : (boss.isZombie ? "🧟 BRUTE" : "👹 MEGA BOSS");
+      const label = matchMode === "bossrush" ? "👹 BOSS " + wave
+                  : matchMode === "survival" ? "👹 WAVE BOSS"
+                  : (boss.isZombie ? "🧟 BRUTE" : "👹 MEGA BOSS");
       ctx.fillText(label + "   " + Math.ceil(Math.max(0, boss.hp)) + " / " + boss.maxHp, canvas.width / 2, by + 13);
     }
   }
@@ -3597,7 +3601,7 @@ function checkDaily() {
     const key = d.getFullYear() + "-" + d.getMonth() + "-" + d.getDate();
     if (save.lastDaily === key) return;
     // was yesterday? keep the streak going, else start over
-    const y = new Date(d.getTime() - 86400000);
+    const y = new Date(d.getFullYear(), d.getMonth(), d.getDate() - 1);   // local "yesterday" — DST-safe
     const yKey = y.getFullYear() + "-" + y.getMonth() + "-" + y.getDate();
     save.dailyStreak = (save.lastDaily === yKey) ? Math.min(save.dailyStreak + 1, 7) : 1;
     save.lastDaily = key;
