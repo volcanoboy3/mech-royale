@@ -38,6 +38,12 @@
   .achCard { background: #1a1f36; border: 3px solid #f5a623; border-radius: 14px; padding: 10px 14px;
              width: 280px; text-align: center; }
   .achCard.locked { border-color: #3a4266; opacity: 0.5; filter: grayscale(0.7); }
+
+  /* 💎 money packs */
+  .packCard { background: #1a1f36; border: 3px solid #555; border-radius: 14px; padding: 14px; width: 300px; text-align: center; }
+  .packPrice { font-size: 26px; font-weight: bold; color: #22c55e; margin: 4px 0; }
+  .packWhat { color: #dfe4f5; font-size: 14px; line-height: 1.5; margin-bottom: 10px; min-height: 62px; }
+  .packCard .btn { min-width: 0; width: 100%; }
   .hidden { display: none !important; }
   h1 { font-size: 54px; margin: 0 0 6px; letter-spacing: 2px; color: #22d3ee; text-shadow: 0 0 24px #22d3ee66; }
   h1 span { color: #f5a623; text-shadow: 0 0 24px #f5a62366; }
@@ -194,6 +200,7 @@
   <button class="btn big" id="btnPlay">▶ PLAY</button>
   <button class="btn" id="btnMechs">🤖 MECH STORE</button>
   <button class="btn" id="btnGuns">🔫 GUN STORE</button>
+  <button class="btn" id="btnPacks">💎 BUY PACKS</button>
   <button class="btn" id="btnMaps">🗺️ MAPS</button>
   <button class="btn" id="btnRanks">🎖️ RANKS</button>
   <button class="btn" id="btnAwards">🏅 STATS & AWARDS</button>
@@ -217,6 +224,14 @@
   <div class="statsRow"><span id="gunCoins">🪙 0</span></div>
   <div id="gunList" class="cardList"></div>
   <button class="btn" id="btnGunBack">⬅ BACK</button>
+</div>
+
+<!-- ================= PACKS (real-money shop — coming soon) ================= -->
+<div id="packsScreen" class="screen hidden">
+  <h2>💎 PACKS</h2>
+  <div style="color:#ffca3a; font-size:15px; text-align:center; max-width:92vw;">💳 These use real money — <b>coming soon!</b> A grown-up will set up payments later.</div>
+  <div id="packList" class="cardList"></div>
+  <button class="btn" id="btnPacksBack">⬅ BACK</button>
 </div>
 
 <!-- ================= RANKS ================= -->
@@ -926,7 +941,7 @@ function sndFanfare(big) {
 let state = "menu";   // "menu" or "game" or "end"
 
 function showScreen(id) {
-  ["menu", "mechStore", "gunStore", "mapScreen", "modeScreen", "codesScreen", "ranksScreen", "awardsScreen", "endScreen"].forEach(s => $(s).classList.add("hidden"));
+  ["menu", "mechStore", "gunStore", "packsScreen", "mapScreen", "modeScreen", "codesScreen", "ranksScreen", "awardsScreen", "endScreen"].forEach(s => $(s).classList.add("hidden"));
   if (id) $(id).classList.remove("hidden");
 }
 function refreshLabels() {
@@ -995,6 +1010,37 @@ function renderRanks() {
 }
 $("btnRanks").onclick = () => { sndClick(); renderRanks(); showScreen("ranksScreen"); };
 $("btnRanksBack").onclick = () => { sndClick(); goMenu(); };
+
+// ---------- 💎 PACKS: real-money shop. The more expensive, the better the pack.
+//            NOTE: payment is NOT wired up yet — a grown-up sets that up later. ----------
+const PACKS = [
+  { name: "🥉 Starter Pack",   price: "$0.99",  color: "#9aa0ad", what: "2 Rare mechs + 2 Rare guns<br>+ 5,000 🪙" },
+  { name: "🥈 Cool Pack",      price: "$2.99",  color: "#3b82f6", what: "2 Mythic mechs + 3 Mythic guns<br>+ 25,000 🪙" },
+  { name: "🥇 Epic Pack",      price: "$4.99",  color: "#a855f7", what: "1 Legendary mech + 2 Legendary guns<br>+ 60,000 🪙" },
+  { name: "💎 Legendary Pack", price: "$9.99",  color: "#f5a623", what: "3 Legendary mechs + 4 Legendary guns<br>+ 150,000 🪙" },
+  { name: "👑 GOD Pack",       price: "$19.99", color: "#ffd700", what: "ALL 60 mechs + ALL 112 guns<br>+ 1,000,000 🪙" },
+];
+function renderPacks() {
+  const list = $("packList");
+  list.innerHTML = "";
+  for (const p of PACKS) {
+    const card = document.createElement("div");
+    card.className = "packCard";
+    card.style.borderColor = p.color;
+    card.innerHTML =
+      '<div class="cardName" style="color:' + p.color + '">' + p.name + '</div>' +
+      '<div class="packPrice">' + p.price + '</div>' +
+      '<div class="packWhat">' + p.what + '</div>';
+    const buy = document.createElement("button");
+    buy.className = "btn"; buy.textContent = "💳 BUY " + p.price;
+    // payment is not real yet — just tell them it's coming soon
+    buy.onclick = () => { sndClick(); achToast("💳 Real-money packs coming soon — ask a grown-up!"); };
+    card.appendChild(buy);
+    list.appendChild(card);
+  }
+}
+$("btnPacks").onclick = () => { sndClick(); renderPacks(); showScreen("packsScreen"); };
+$("btnPacksBack").onclick = () => { sndClick(); goMenu(); };
 
 // =====================================================================
 //  🔒 THE REALLY REALLY SECRET BUTTON — click the "M" of MECH ROYALE.
@@ -1083,6 +1129,14 @@ $("btnAd").onclick = () => {
   });
 };
 updateAdBtn();
+
+// 📺 random pop-up ads while you're browsing the menu (turned off by the No-Ads perk)
+let popAdT = 100;
+setInterval(() => {
+  if (save.noAds || adPlaying || state !== "menu") return;   // never mid-game, never if No Ads
+  popAdT -= 1;
+  if (popAdT <= 0) { popAdT = 100 + Math.random() * 70; playAd("A quick ad while you wait…", "Back in", null); }
+}, 1000);
 
 $("btnPlay").onclick  = () => { sndClick(); syncModeLabels(); showScreen("modeScreen"); };
 $("btnMechs").onclick = () => { sndClick(); renderMechStore(); showScreen("mechStore"); };
