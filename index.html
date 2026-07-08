@@ -22,6 +22,18 @@
               transition: transform 0.35s ease; pointer-events: none; white-space: nowrap; }
   #achToast.show { transform: translateX(-50%) translateY(0); }
 
+  /* 📺 watch-ad button + the pretend-ad screen */
+  #btnAd { border-color: #16a34a; background: #14331f; }
+  #btnAd:hover:not(:disabled) { border-color: #22c55e; background: #16402a; }
+  #adOverlay { position: fixed; inset: 0; z-index: 40; background: rgba(0,0,0,0.86);
+               display: flex; align-items: center; justify-content: center; }
+  #adBox { width: min(92vw, 420px); background: #11162b; border: 3px solid #f5a623;
+           border-radius: 16px; padding: 22px; text-align: center; }
+  #adLabel { font-size: 12px; letter-spacing: 2px; color: #8b93b0; }
+  #adArt { font-size: 66px; margin: 16px 0; }
+  #adMsg { font-size: 18px; font-weight: bold; color: #fff; }
+  #adTimer { margin-top: 14px; color: #f5c542; font-weight: bold; font-size: 16px; }
+
   /* 🏅 award cards */
   .achCard { background: #1a1f36; border: 3px solid #f5a623; border-radius: 14px; padding: 10px 14px;
              width: 280px; text-align: center; }
@@ -174,6 +186,7 @@
   <button class="btn" id="btnMaps">🗺️ MAPS</button>
   <button class="btn" id="btnRanks">🎖️ RANKS</button>
   <button class="btn" id="btnAwards">🏅 STATS & AWARDS</button>
+  <button class="btn" id="btnAd">📺 WATCH AD → +500 🪙</button>
   <button class="btn" id="btnCodes">🔑 SECRET CODES</button>
   <button class="btn" id="btnRestart">🔄 RESTART GAME</button>
   <p class="hint">WASD to move • mouse to aim • click to shoot • earn coins from kills and wins!</p>
@@ -288,6 +301,16 @@
 <button id="btnPause">⏸</button>
 <button id="btnDash">⚡</button>
 <div id="achToast"></div>
+
+<!-- ================= WATCH-AD SCREEN (pretend ad for now) ================= -->
+<div id="adOverlay" class="hidden">
+  <div id="adBox">
+    <div id="adLabel">▶ PRETEND AD — a real ad goes here one day!</div>
+    <div id="adArt">🎮</div>
+    <div id="adMsg">Watch to earn coins!</div>
+    <div id="adTimer"></div>
+  </div>
+</div>
 
 <!-- ================= TEAM CHAT (during a match) ================= -->
 <button id="btnChat">💬</button>
@@ -947,6 +970,50 @@ function renderRanks() {
 }
 $("btnRanks").onclick = () => { sndClick(); renderRanks(); showScreen("ranksScreen"); };
 $("btnRanksBack").onclick = () => { sndClick(); goMenu(); };
+
+// =====================================================================
+//  📺 WATCH-AD BUTTON — watch a (pretend) ad to earn 500 coins.
+//  TO EARN REAL MONEY: a grown-up signs up with a game-ad company (like
+//  AdinPlay or GameMonetize), and you swap the pretend ad inside watchAd()
+//  for their real "rewarded ad" call — the reward() part stays the same.
+// =====================================================================
+let adCooldown = 0;
+function updateAdBtn() {
+  const b = $("btnAd");
+  if (!b) return;
+  if (adCooldown > 0) { b.disabled = true; b.textContent = "📺 Watch again in " + Math.ceil(adCooldown) + "s"; }
+  else { b.disabled = false; b.textContent = "📺 WATCH AD → +500 🪙"; }
+}
+setInterval(() => { if (adCooldown > 0) { adCooldown = Math.max(0, adCooldown - 1); updateAdBtn(); } }, 1000);
+
+function watchAd(coins, reward) {
+  ensureAudio();
+  const ov = $("adOverlay"), art = $("adArt"), msg = $("adMsg"), timer = $("adTimer");
+  const arts = ["🤖", "🎮", "🍕", "🚀", "🦖", "⚽", "🎧", "🐱", "🍔", "🎸", "🛸", "🐶"];
+  ov.classList.remove("hidden");
+  msg.textContent = "Watch to earn " + coins + " coins!";
+  let t = 5;
+  timer.textContent = "Ad ends in " + t + "…";
+  beep(440, 0.1, "square", 0.05);
+  const iv = setInterval(() => {
+    art.textContent = arts[Math.floor(Math.random() * arts.length)];
+    t--;
+    if (t > 0) timer.textContent = "Ad ends in " + t + "…";
+    else { clearInterval(iv); ov.classList.add("hidden"); reward(); }
+  }, 1000);
+}
+
+$("btnAd").onclick = () => {
+  if (adCooldown > 0) return;
+  sndClick();
+  watchAd(500, () => {
+    save.coins += 500; persist(); refreshLabels();
+    achToast("🎉 Thanks for watching! +500 🪙");
+    sndCoin();
+    adCooldown = 30; updateAdBtn();
+  });
+};
+updateAdBtn();
 
 $("btnPlay").onclick  = () => { sndClick(); syncModeLabels(); showScreen("modeScreen"); };
 $("btnMechs").onclick = () => { sndClick(); renderMechStore(); showScreen("mechStore"); };
