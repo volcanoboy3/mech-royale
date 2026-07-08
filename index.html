@@ -172,6 +172,7 @@
   <button class="btn" id="btnMechs">🤖 MECH STORE</button>
   <button class="btn" id="btnGuns">🔫 GUN STORE</button>
   <button class="btn" id="btnMaps">🗺️ MAPS</button>
+  <button class="btn" id="btnRanks">🎖️ RANKS</button>
   <button class="btn" id="btnAwards">🏅 STATS & AWARDS</button>
   <button class="btn" id="btnCodes">🔑 SECRET CODES</button>
   <button class="btn" id="btnRestart">🔄 RESTART GAME</button>
@@ -192,6 +193,14 @@
   <div class="statsRow"><span id="gunCoins">🪙 0</span></div>
   <div id="gunList" class="cardList"></div>
   <button class="btn" id="btnGunBack">⬅ BACK</button>
+</div>
+
+<!-- ================= RANKS ================= -->
+<div id="ranksScreen" class="screen hidden">
+  <h2>🎖️ RANKS</h2>
+  <div id="ranksTop" style="font-size:16px; color:#aab2d0; text-align:center;"></div>
+  <div id="rankList" class="cardList"></div>
+  <button class="btn" id="btnRanksBack">⬅ BACK</button>
 </div>
 
 <!-- ================= STATS & AWARDS ================= -->
@@ -512,7 +521,7 @@ const _gunPow = {}; GUN_TYPES.forEach(t => _gunPow[t.id] = t.dmg * t.rate * t.pe
 const _powLo = Math.min(...Object.values(_gunPow)), _powHi = Math.max(...Object.values(_gunPow));
 function gunPrice(type, rarity) {
   const f = (_gunPow[type] - _powLo) / (_powHi - _powLo || 1);   // 0 = weakest gun, 1 = strongest
-  const band = { common: [500, 800], rare: [2000, 4500], mythic: [8000, 16000], legendary: [25000, 55000] }[rarity];
+  const band = { common: [500, 800], rare: [2000, 4500], mythic: [22000, 45000], legendary: [70000, 150000] }[rarity];
   return Math.round((band[0] + f * (band[1] - band[0])) / 10) * 10;
 }
 
@@ -870,7 +879,7 @@ function sndFanfare(big) {
 let state = "menu";   // "menu" or "game" or "end"
 
 function showScreen(id) {
-  ["menu", "mechStore", "gunStore", "mapScreen", "modeScreen", "codesScreen", "awardsScreen", "endScreen"].forEach(s => $(s).classList.add("hidden"));
+  ["menu", "mechStore", "gunStore", "mapScreen", "modeScreen", "codesScreen", "ranksScreen", "awardsScreen", "endScreen"].forEach(s => $(s).classList.add("hidden"));
   if (id) $(id).classList.remove("hidden");
 }
 function refreshLabels() {
@@ -915,6 +924,29 @@ function renderAwards() {
 }
 $("btnAwards").onclick = () => { sndClick(); renderAwards(); showScreen("awardsScreen"); };
 $("btnAwardsBack").onclick = () => { sndClick(); goMenu(); };
+
+// ---------- the RANKS screen: climb by winning; higher rank = more coins per win ----------
+function renderRanks() {
+  const cur = rankIndexFor(save.wins);
+  $("ranksTop").innerHTML = "You have <b>🏆 " + save.wins + "</b> wins — win more to rank up!<br>" +
+    "Each rank up = <b>+30 coins</b> more every time you win a match.";
+  const list = $("rankList");
+  list.innerHTML = "";
+  RANKS.forEach((rk, i) => {
+    const isCur = i === cur, done = i <= cur;
+    const card = document.createElement("div");
+    card.className = "card";
+    card.style.borderColor = isCur ? "#22c55e" : done ? rk.color : "#3a4266";
+    if (isCur) card.style.boxShadow = "0 0 16px #22c55e88";
+    card.style.opacity = i > cur ? "0.75" : "1";
+    card.innerHTML =
+      '<div class="cardName">' + rankHTML(rk) + (isCur ? '  <span style="color:#22c55e">← YOU</span>' : done ? '  ✔' : '') + '</div>' +
+      '<div class="cardStats">🏆 ' + rk.wins + ' wins • 🎖️ +' + ((i + 1) * 30) + ' coins per win</div>';
+    list.appendChild(card);
+  });
+}
+$("btnRanks").onclick = () => { sndClick(); renderRanks(); showScreen("ranksScreen"); };
+$("btnRanksBack").onclick = () => { sndClick(); goMenu(); };
 
 $("btnPlay").onclick  = () => { sndClick(); syncModeLabels(); showScreen("modeScreen"); };
 $("btnMechs").onclick = () => { sndClick(); renderMechStore(); showScreen("mechStore"); };
@@ -1853,7 +1885,9 @@ function endMatch(won, leftEarly) {
   closeChat();
   towerChoosing = false; $("towerPanel").classList.add("hidden");
   try {
-    const bonus = playCoins() + (won ? winCoins() : 0);
+    // 🎖️ the higher your rank, the bigger your per-win coin reward (+30 per rank tier)
+    const rankBonus = won ? (rankIndexFor(save.wins) + 1) * 30 : 0;
+    const bonus = playCoins() + (won ? winCoins() : 0) + rankBonus;
 
     // show the end screen FIRST — the player must never get stuck on a frozen battlefield
     const place = won ? 1 : bots.filter(b => b.alive).length + 1;
@@ -1881,6 +1915,7 @@ function endMatch(won, leftEarly) {
       "🎯 Kills: " + matchKills + " → +" + (matchKills * killCoins()) + " 🪙<br>" +
       "🎮 Played: +" + playCoins() + " 🪙<br>" +
       (won ? "🏆 Win bonus: +" + winCoins() + " 🪙<br>" : "") +
+      (won ? "🎖️ Rank bonus: +" + rankBonus + " 🪙<br>" : "") +
       "🏅 Rank: " + rankHTML(newRank) + " (🏆 " + (save.wins + (won ? 1 : 0)) + " wins)<br>" +
       "<b style='color:#f5c542'>Total earned: +" + (matchEarned() + bonus) + " 🪙</b>";
     showScreen("endScreen");
