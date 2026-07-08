@@ -5,11 +5,20 @@ A fast top-down mech battle-royale you play right in your browser. Pick a mech, 
 **▶ Play:** open `index.html` (double-click it) or visit the live site.
 
 ## ✨ Features
-- 🤖 **30 mechs** to buy — Common → Rare → Mythic → Legendary (each with its own health & speed)
-- 🔫 **28 guns × 4 rarities** = 112 guns to collect, buy, and upgrade to Level 5
-- ⚔️ **Game modes** — Free For All *or* Teams from **1v1 up to 50v50**
+- 🤖 **60 mechs** to buy — Common → Rare → Mythic → Legendary (each with its own health, speed & signature ⚡ super ability)
+- 🔫 **Dozens of guns × 4 rarities** to collect, buy, and upgrade to Level 5
+- 🐾 **Pets** — drones & animals that fight, heal, or grab coins alongside you
+- 🎩 **Decorations** — buy hats & accessories (crown, top hat, shades, headphones…) and wear them on your mech
+- ⚔️ **9 game modes:**
+  - 🎯 Free For All & 🤝 Teams from **1v1 up to 50v50**
+  - 👹 Boss Fight (one giant mega-boss) and 🌊 Survival (10 waves)
+  - 🔫 Gun Game (every kill upgrades your gun) and 🗼 Tower Climb (solo, forever-powers)
+  - 🧟 **Zombie Horde** — endless waves of fast zombies + a BRUTE every 5th wave
+  - 👹 **Boss Rush** — endless bosses back-to-back, each one tougher
+  - 🚩 **Capture the Flag** — grab the enemy flag and run it home, first team to 3
 - 🗺️ **30 different maps** — pick a themed battleground or go random
 - 🏅 **Ranks** that climb as you win — Leather → Wood → … → Multiverse → Everything, and enemies get **tougher** the higher your rank
+- 🏆 **Personal records** & 🎁 **daily login rewards** (streak up to day 7)
 - 🏪 **Mech Store & Gun Store** — spend coins you earn from kills and wins
 - ⚡ **Dash** move to dodge, 🧱 **blocks** to hide behind, ❤️ **health packs** to heal
 - 📱 **Plays on phones** with twin thumbsticks, plus 🗺️ minimap, 🔥 kill streaks & juicy effects
