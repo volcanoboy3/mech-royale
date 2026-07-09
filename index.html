@@ -152,6 +152,8 @@
              font-size: 28px; background: rgba(34,211,238,0.16); border: 2px solid #22d3ee; color: #eafcff; cursor: pointer; }
   #btnSuper { position: fixed; right: 96px; bottom: 152px; z-index: 6; width: 70px; height: 70px; border-radius: 50%;
               font-size: 28px; background: rgba(245,197,66,0.18); border: 2px solid #f5c542; color: #fff; cursor: pointer; }
+  #btnEmote { position: fixed; right: 24px; bottom: 236px; z-index: 6; width: 58px; height: 58px; border-radius: 50%;
+              font-size: 24px; background: rgba(168,85,247,0.2); border: 2px solid #a855f7; color: #fff; cursor: pointer; }
   #btnPause, #btnDash, #btnSuper { display: none; }
   body.touch #btnPause, body.touch #btnDash, body.touch #btnSuper { display: block; }
 
@@ -261,6 +263,8 @@
       <button class="btn" id="btnGuns">🔫 GUN STORE</button>
       <button class="btn" id="btnPets">🐾 PETS</button>
       <button class="btn" id="btnDecos">🎩 DECORATE</button>
+      <button class="btn" id="btnStyle">🎨 STYLE</button>
+      <button class="btn" id="btnMoon">🌙 MOON: OFF</button>
       <button class="btn" id="btnPacks">💎 BUY PACKS</button>
       <button class="btn" id="btnMaps">🗺️ MAPS</button>
       <button class="btn" id="btnRanks">🎖️ RANKS</button>
@@ -295,6 +299,16 @@
   <div class="statsRow"><span id="decoCoins">🪙 0</span></div>
   <div id="decoList" class="cardList"></div>
   <button class="btn" id="btnDecosBack">⬅ BACK</button>
+</div>
+
+<!-- ================= STYLE (paint + trails) ================= -->
+<div id="styleScreen" class="screen hidden">
+  <h2>🎨 STYLE YOUR MECH</h2>
+  <div class="modeDesc" style="margin:0 0 4px">🖌️ PAINT — pick your mech's color</div>
+  <div id="paintRow" style="display:flex;flex-wrap:wrap;gap:8px;justify-content:center;max-width:520px"></div>
+  <div class="modeDesc" style="margin:14px 0 4px">✨ TRAIL — leave a cool streak as you zoom</div>
+  <div id="trailRow" style="display:flex;flex-wrap:wrap;gap:8px;justify-content:center;max-width:520px"></div>
+  <button class="btn" id="btnStyleBack" style="margin-top:16px">⬅ BACK</button>
 </div>
 
 <!-- ================= PETS ================= -->
@@ -423,6 +437,7 @@
 <button id="btnPause">⏸</button>
 <button id="btnDash">⚡</button>
 <button id="btnSuper">🌟</button>
+<button id="btnEmote">😃</button>
 <div id="achToast"></div>
 
 <!-- ================= THE REALLY SECRET PASSWORD (hidden on the "M") ================= -->
@@ -918,7 +933,8 @@ function freshSave() {
            stats: { kills: 0, matches: 0, bossKills: 0, bestFloor: 0, coinsEarned: 0, timePlayed: 0 },
            ach: {}, petsOwned: [], petEquipped: "none",
            records: { survival: 0, zombie: 0, bossrush: 0, kills: 0 },
-           decosOwned: [], decoEquipped: "none", lastDaily: "", dailyStreak: 0 };
+           decosOwned: [], decoEquipped: "none", lastDaily: "", dailyStreak: 0,
+           mechColor: "default", trail: "none", moonMode: false };
 }
 let save;
 try { save = JSON.parse(localStorage.getItem(SAVE_KEY)); } catch (e) { save = null; }
@@ -935,6 +951,9 @@ if (save.decoEquipped == null) save.decoEquipped = "none";
 if (save.lastDaily == null) save.lastDaily = "";
 if (save.dailyStreak == null) save.dailyStreak = 0;
 if (save.mechEquipped == null || !MECHS[save.mechEquipped]) save.mechEquipped = 0;   // never point at a missing mech
+if (save.mechColor == null) save.mechColor = "default";   // 🎨 paint
+if (save.trail == null) save.trail = "none";              // ✨ trail
+if (save.moonMode == null) save.moonMode = false;         // 🌙 moon gravity toggle
 function persist() {
   // saving can fail in some browsers (private mode etc.) — never crash the game for it
   try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) {}
@@ -1048,7 +1067,7 @@ function sndFanfare(big) {
 let state = "menu";   // "menu" or "game" or "end"
 
 function showScreen(id) {
-  ["menu", "mechStore", "gunStore", "petsScreen", "decosScreen", "packsScreen", "mapScreen", "modeScreen", "codesScreen", "ranksScreen", "awardsScreen", "endScreen"].forEach(s => $(s).classList.add("hidden"));
+  ["menu", "mechStore", "gunStore", "petsScreen", "decosScreen", "styleScreen", "packsScreen", "mapScreen", "modeScreen", "codesScreen", "ranksScreen", "awardsScreen", "endScreen"].forEach(s => $(s).classList.add("hidden"));
   if (id) $(id).classList.remove("hidden");
 }
 function refreshLabels() {
@@ -1281,6 +1300,43 @@ function renderDecos() {
 }
 $("btnDecos").onclick = () => { sndClick(); renderDecos(); showScreen("decosScreen"); };
 $("btnDecosBack").onclick = () => { sndClick(); goMenu(); };
+
+// 🎨 STYLE — paint your mech + pick a trail (both free — just for fun!)
+function renderStyle() {
+  const paint = $("paintRow"); paint.innerHTML = "";
+  for (const p of PAINTS) {
+    const on = save.mechColor === p.id;
+    const chip = document.createElement("button");
+    chip.title = p.name;
+    chip.style.cssText = "width:52px;height:52px;border-radius:12px;cursor:pointer;font-size:10px;font-weight:bold;color:#fff;" +
+      "border:" + (on ? "3px solid #22d3ee" : "2px solid #3a4266") + ";" +
+      (p.id === "rainbow"
+        ? "background:linear-gradient(135deg,#ef4444,#f5c542,#22c55e,#3b82f6,#a855f7)"
+        : "background:" + p.color);
+    if (p.id === "rainbow") chip.textContent = "🌈";
+    else if (p.id === "default") chip.textContent = "—";
+    chip.onclick = () => { sndClick(); save.mechColor = p.id; persist(); renderStyle(); };
+    paint.appendChild(chip);
+  }
+  const trail = $("trailRow"); trail.innerHTML = "";
+  for (const t of TRAILS) {
+    const on = save.trail === t.id;
+    const chip = document.createElement("button");
+    chip.title = t.name;
+    chip.style.cssText = "min-width:64px;padding:8px 10px;border-radius:12px;cursor:pointer;font-size:22px;background:#232a45;" +
+      "border:" + (on ? "3px solid #22d3ee" : "2px solid #3a4266") + ";";
+    chip.textContent = t.emoji;
+    chip.onclick = () => { sndClick(); save.trail = t.id; persist(); renderStyle(); };
+    trail.appendChild(chip);
+  }
+}
+$("btnStyle").onclick = () => { sndClick(); renderStyle(); showScreen("styleScreen"); };
+$("btnStyleBack").onclick = () => { sndClick(); goMenu(); };
+
+// 🌙 MOON GRAVITY toggle — floaty, bouncy, big dashes for everyone
+function syncMoonBtn() { $("btnMoon").textContent = "🌙 MOON: " + (save.moonMode ? "ON" : "OFF"); }
+$("btnMoon").onclick = () => { sndClick(); save.moonMode = !save.moonMode; persist(); syncMoonBtn(); };
+syncMoonBtn();
 
 // =====================================================================
 //  🔒 THE REALLY REALLY SECRET BUTTON — click the "M" of MECH ROYALE.
@@ -1866,7 +1922,7 @@ const BOT_NAMES = [
   "MemeLord", "KittyKat", "PandaPunch", "SlothSlam", "TigerTail", "BearHug", "SharkBite", "SquidSquad",
 ];
 
-let player, bots = [], blocks = [], bullets = [], particles = [], floaties = [], banners = [], healthPacks = [];
+let player, bots = [], blocks = [], bullets = [], particles = [], floaties = [], banners = [], healthPacks = [], trails = [];
 let cam = { x: 0, y: 0 }, shake = 0, gameTime = 0, flash = 0, paused = false;
 let matchKills = 0, matchOver = false, streak = 0, lastKillTime = -99, bonusCoins = 0, hazardT = 0;
 const keys = {};
@@ -1969,6 +2025,40 @@ const DECOS = [
 ];
 const decoDef = id => DECOS.find(d => d.id === id) || DECOS[0];
 
+// 🎨 PAINT colors ("default" keeps your mech's own color, "rainbow" cycles through all colors)
+const PAINTS = [
+  { id: "default", name: "Default", color: "#8a93b5" },
+  { id: "red",     name: "Red",     color: "#ef4444" },
+  { id: "orange",  name: "Orange",  color: "#f97316" },
+  { id: "gold",    name: "Gold",    color: "#f5c542" },
+  { id: "lime",    name: "Lime",    color: "#84cc16" },
+  { id: "green",   name: "Green",   color: "#22c55e" },
+  { id: "cyan",    name: "Cyan",    color: "#22d3ee" },
+  { id: "blue",    name: "Blue",    color: "#3b82f6" },
+  { id: "purple",  name: "Purple",  color: "#a855f7" },
+  { id: "pink",    name: "Pink",    color: "#ec4899" },
+  { id: "white",   name: "White",   color: "#e5e7eb" },
+  { id: "black",   name: "Black",   color: "#1f2937" },
+  { id: "rainbow", name: "Rainbow", color: "rainbow" },
+];
+// the actual color to paint a mech this frame (handles the animated rainbow)
+function paintColor(id, fallback) {
+  if (id === "default" || id == null) return fallback;
+  if (id === "rainbow") return "hsl(" + Math.floor(gameTime * 90 % 360) + ",90%,60%)";
+  const p = PAINTS.find(x => x.id === id);
+  return p ? p.color : fallback;
+}
+// ✨ TRAILS — colored streak left behind you (cols = the colors it flickers through)
+const TRAILS = [
+  { id: "none",    emoji: "🚫", name: "None",    cols: [] },
+  { id: "fire",    emoji: "🔥", name: "Fire",    cols: ["#ff3d1a", "#ff7a1f", "#ffd23f"] },
+  { id: "rainbow", emoji: "🌈", name: "Rainbow", cols: ["rainbow"] },
+  { id: "sparkle", emoji: "✨", name: "Sparkle", cols: ["#ffffff", "#a8f0ff", "#7ef9ff"] },
+  { id: "ice",     emoji: "❄️", name: "Ice",     cols: ["#8ee6ff", "#c9f4ff", "#ffffff"] },
+  { id: "smoke",   emoji: "💨", name: "Smoke",   cols: ["#9aa3b2", "#6b7280", "#c7cdd8"] },
+];
+const trailDef = id => TRAILS.find(t => t.id === id) || TRAILS[0];
+
 function activateSuper() {
   if (!player || !player.alive || player.superChg < 1) return;
   if (paused || chatOpen || towerChoosing || state !== "game") return;   // no firing while the fight is frozen
@@ -1997,7 +2087,7 @@ function makeFighter(x, y, mech, gun, isPlayer, name, team) {
            r: 15 + Math.round(mech.hp / 50),        // bigger health = bigger mech
            hp: mech.hp, maxHp: mech.hp, speed: mech.speed,
            cooldown: 0, aim: 0, alive: true, lastHurt: -99, walk: 0, hitFlash: 0, dashCd: 0, dashT: 0,
-           sayTxt: "", sayT: 0, spdT: 0, dmgT: 0, shieldT: 0, ladderIdx: 0, respawnT: null,
+           sayTxt: "", sayT: 0, emote: "", emoteT: 0, spdT: 0, dmgT: 0, shieldT: 0, ladderIdx: 0, respawnT: null,
            superChg: 0, superFire: 0, frozenT: 0,
            wx: x, wy: y, wanderT: 0, strafeDir: 1, strafeT: 1, aimErr: 0.14 + Math.random() * 0.18 };
 }
@@ -2174,7 +2264,7 @@ function startMatch(cfg) {
 
   decor = genDecor(WORLD.w, WORLD.h);   // themed scenery for this map
   renderBackground();                    // paint the fancy floor once for this match
-  bullets = []; particles = []; floaties = []; banners = [];
+  bullets = []; particles = []; floaties = []; banners = []; trails = [];
   matchKills = 0; bonusCoins = 0; matchOver = false; shake = 0; gameTime = 0; flash = 0;
   streak = 0; lastKillTime = -99; paused = false; hazardT = 2.5;
   squadOrder = null; chatLog = []; chatHinted = false; closeChat();
@@ -2434,6 +2524,15 @@ function updateCtfBot(b, dt) {
 
 function banner(txt, color = "#fff") { banners.unshift({ txt, color, life: 3 }); banners = banners.slice(0, 4); }
 function floaty(x, y, txt, color = "#fff") { floaties.push({ x, y, txt, color, life: 1 }); }
+// ✨ drop a colored dot of your trail behind the mech
+function spawnTrail(f) {
+  const t = trailDef(save.trail);
+  if (!t.cols.length) return;
+  let c = t.cols[Math.floor(Math.random() * t.cols.length)];
+  if (c === "rainbow") c = "hsl(" + Math.floor(gameTime * 220 % 360) + ",90%,60%)";
+  trails.push({ x: f.x + (Math.random() - 0.5) * 8, y: f.y + (Math.random() - 0.5) * 8,
+                life: 0.5, color: c, size: f.r * (0.4 + Math.random() * 0.45) });
+}
 
 // ---------- bonus-map hazard: the map shoots bullets from the edges ----------
 function fireHazard() {
@@ -2757,13 +2856,14 @@ function update(dt) {
     const m = Math.hypot(dx, dy) || 1;
     // DASH — SPACE or the on-screen ⚡ button, to zoom in your move direction
     if ((keys[" "] || dashPressed) && player.dashCd <= 0 && moving) {
-      player.dashT = 0.15; player.dashCd = 1.4;
+      player.dashT = save.moonMode ? 0.28 : 0.15; player.dashCd = 1.4;   // 🌙 longer floaty moon-dash
       beep(320, 0.12, "sine", 0.08, 640);
     }
     dashPressed = false;
-    const spd = player.speed * (player.dashT > 0 ? 3 : 1) * (player.spdT > 0 ? 1.6 : 1);
+    const spd = player.speed * (player.dashT > 0 ? 3 : 1) * (player.spdT > 0 ? 1.6 : 1) * (save.moonMode ? 1.3 : 1);
     moveFighter(player, dx / m * spd * dt, dy / m * spd * dt);
     if (player.dashT > 0) particles.push({ x: player.x, y: player.y, vx: 0, vy: 0, life: 0.22, color: "#7ef9ff", size: player.r });
+    if (save.trail !== "none" && moving) spawnTrail(player);   // ✨ leave a streak behind you
 
     player.cooldown -= dt;
     // phone: the right thumbstick aims and auto-fires; on desktop the mouse aims & click fires
@@ -2797,7 +2897,8 @@ function update(dt) {
   // health packs come back a few seconds after being used; hit-flashes fade out
   for (const pk of healthPacks) if (pk.taken) { pk.cd -= dt; if (pk.cd <= 0) pk.taken = false; }
   for (const f of fighters()) if (f.hitFlash > 0) f.hitFlash -= dt;
-  for (const f of fighters()) if (f.sayT > 0) f.sayT -= dt;   // speech bubbles fade out
+  for (const f of fighters()) { if (f.sayT > 0) f.sayT -= dt; if (f.emoteT > 0) f.emoteT -= dt; }   // bubbles + emotes fade
+  for (let i = trails.length - 1; i >= 0; i--) { trails[i].life -= dt; if (trails[i].life <= 0) trails.splice(i, 1); }   // ✨ trail dots fade
   for (const c of chatLog) c.life -= dt;
 
   // ⭐ power-ups appear now and then — grab them for a boost!
@@ -3004,16 +3105,16 @@ function drawMech(f) {
   ctx.save();
   ctx.translate(f.x, f.y);
   ctx.rotate(f.aim);
-  // stomping feet
-  const step = Math.sin(f.walk) * f.r * 0.45;
+  // stomping feet (bouncier on the moon!)
+  const step = Math.sin(f.walk) * f.r * (save.moonMode ? 0.85 : 0.45);
   ctx.fillStyle = "#14182b";
   ctx.fillRect(-f.r * 0.2 + step, -f.r * 0.95, f.r * 0.55, f.r * 0.5);
   ctx.fillRect(-f.r * 0.2 - step, f.r * 0.45, f.r * 0.55, f.r * 0.5);
   // gun barrel (tip colored by gun rarity)
   ctx.fillStyle = "#20263f"; ctx.fillRect(f.r * 0.3, -4, f.r * 0.9 + 14, 8);
   ctx.fillStyle = RARITIES[f.gun.rarity].color; ctx.fillRect(f.r * 1.2 + 8, -4, 7, 8);
-  // body (edge colored by mech rarity)
-  ctx.fillStyle = f.mech.color;
+  // body (edge colored by mech rarity; player can repaint it 🎨)
+  ctx.fillStyle = f.isPlayer ? paintColor(save.mechColor, f.mech.color) : f.mech.color;
   ctx.fillRect(-f.r * 0.8, -f.r * 0.7, f.r * 1.6, f.r * 1.4);
   ctx.strokeStyle = rc; ctx.lineWidth = 2.5;
   ctx.strokeRect(-f.r * 0.8, -f.r * 0.7, f.r * 1.6, f.r * 1.4);
@@ -3052,6 +3153,14 @@ function drawMech(f) {
     ctx.font = sz + "px Arial"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
     ctx.fillText(decoDef(save.decoEquipped).emoji, f.x, f.y - f.r * 0.5);
     ctx.textBaseline = "alphabetic";
+  }
+  // 💃 emote pop — a big bouncing emoji above you
+  if (f.emoteT > 0 && f.emote) {
+    const bob = Math.sin(gameTime * 9) * 5;
+    ctx.font = "34px Arial"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.globalAlpha = clamp(f.emoteT, 0, 1);
+    ctx.fillText(f.emote, f.x, f.y - f.r - 42 + bob);
+    ctx.globalAlpha = 1; ctx.textBaseline = "alphabetic";
   }
   // name + health bar floating above
   ctx.fillStyle = f.isPlayer ? "#22d3ee" : (friend ? "#7CFC98" : "#ff9b9b");
@@ -3281,6 +3390,13 @@ function draw() {
   }
 
   // all the mechs
+  // ✨ trail dots (drawn under the mechs)
+  for (const tr of trails) {
+    ctx.globalAlpha = clamp(tr.life / 0.5, 0, 1) * 0.8;
+    ctx.fillStyle = tr.color;
+    ctx.beginPath(); ctx.arc(tr.x, tr.y, tr.size, 0, 7); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
   for (const f of fighters()) if (f.alive) drawMech(f);
 
   // 🐾 your pet floating beside you
@@ -3463,6 +3579,14 @@ function drawStick(s, color) {
 }
 
 // ---------- controls ----------
+// 💃 EMOTES — pop a big emoji above your mech (keys 1-4, or the 😃 button)
+const EMOTES = ["😎", "❤️", "😂", "👍", "😢", "🔥", "🎉", "😡"];
+let emoteIdx = 0;
+function doEmote(emoji) {
+  if (!player || state !== "game") return;
+  player.emote = emoji; player.emoteT = 2;
+  beep(520, 0.08, "sine", 0.05, 700);
+}
 window.addEventListener("keydown", e => {
   if (chatOpen) {                        // typing goes to the chat box, not the game
     if (e.key === "Escape") closeChat();
@@ -3473,6 +3597,7 @@ window.addEventListener("keydown", e => {
   if (e.key.toLowerCase() === "p" && state === "game") paused = !paused;
   if (e.key.toLowerCase() === "e" && state === "game") { e.preventDefault(); activateSuper(); }
   if (e.key.toLowerCase() === "t" && state === "game") { e.preventDefault(); openChat(); }
+  if (["1", "2", "3", "4"].includes(e.key) && state === "game") doEmote(EMOTES[+e.key - 1]);   // 💃 quick emotes
   if (["arrowup", "arrowdown", "arrowleft", "arrowright", " "].includes(e.key.toLowerCase())) e.preventDefault();
 });
 window.addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
@@ -3514,6 +3639,9 @@ $("btnPause").addEventListener("touchstart", e => { e.preventDefault(); if (stat
 $("btnPause").onclick = () => { if (state === "game") paused = !paused; };
 $("btnSuper").addEventListener("touchstart", e => { e.preventDefault(); activateSuper(); ensureAudio(); }, { passive: false });
 $("btnSuper").addEventListener("click", () => activateSuper());
+const emoteTap = () => { doEmote(EMOTES[emoteIdx % EMOTES.length]); emoteIdx++; };   // cycles through the emotes
+$("btnEmote").addEventListener("touchstart", e => { e.preventDefault(); emoteTap(); ensureAudio(); }, { passive: false });
+$("btnEmote").addEventListener("click", emoteTap);
 if (isTouch) document.body.classList.add("touch");
 
 // ---------- animated menu background: drifting stars + glowing orbs ----------
