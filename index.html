@@ -426,6 +426,18 @@
     <div class="sliderRow"><input type="range" id="ctfSlider" min="1" max="15" value="4"><span id="ctfLabel">4 v 4</span></div>
     <button class="btn" id="btnPlayCTF">▶ PLAY CAPTURE THE FLAG</button>
   </div>
+  <div class="modeBox">
+    <div class="modeTitle">⚽ MECH SOCCER</div>
+    <div class="modeDesc">🔵 vs 🔴 — push the ⚽ ball into the enemy goal! First team to 3 wins. Blast each other too — everyone respawns.</div>
+    <div class="sliderRow"><input type="range" id="soccerSlider" min="1" max="10" value="3"><span id="soccerLabel">3 v 3</span></div>
+    <button class="btn" id="btnPlaySoccer">▶ PLAY SOCCER</button>
+  </div>
+  <div class="modeBox">
+    <div class="modeTitle">🏁 RACE</div>
+    <div class="modeDesc">Blast your rivals AND race through the checkpoints — first mech to the 🏁 finish wins! Knocked out? You restart at your last checkpoint.</div>
+    <div class="sliderRow"><input type="range" id="raceSlider" min="2" max="12" value="6"><span id="raceLabel">6 racers</span></div>
+    <button class="btn" id="btnPlayRace">▶ START THE RACE</button>
+  </div>
   </div>
   <button class="btn" id="btnModeBack">⬅ BACK</button>
 </div>
@@ -1632,6 +1644,9 @@ function syncModeLabels() {
   $("ggLabel").textContent = (+$("ggSlider").value) + " players";
   const c = +$("ctfSlider").value;
   $("ctfLabel").textContent = c + " v " + c;
+  const so = +$("soccerSlider").value;
+  $("soccerLabel").textContent = so + " v " + so;
+  $("raceLabel").textContent = (+$("raceSlider").value) + " racers";
   const tw = +$("towerSlider").value;
   $("towerLabel").textContent = tw === 0 ? "Solo (just you)" : "You + " + tw + " helper" + (tw > 1 ? "s" : "");
 }
@@ -1641,6 +1656,8 @@ $("bossSlider").addEventListener("input", syncModeLabels);
 $("survSlider").addEventListener("input", syncModeLabels);
 $("ggSlider").addEventListener("input", syncModeLabels);
 $("ctfSlider").addEventListener("input", syncModeLabels);
+$("soccerSlider").addEventListener("input", syncModeLabels);
+$("raceSlider").addEventListener("input", syncModeLabels);
 $("towerSlider").addEventListener("input", syncModeLabels);
 $("btnPlayFFA").onclick   = () => { sndClick(); startMatch({ mode: "ffa",      size: +$("ffaSlider").value }); };
 $("btnPlayTeams").onclick = () => { sndClick(); startMatch({ mode: "teams",    size: +$("teamSlider").value }); };
@@ -1651,6 +1668,8 @@ $("btnPlayTower").onclick = () => { sndClick(); startMatch({ mode: "tower",    s
 $("btnPlayZombie").onclick = () => { sndClick(); startMatch({ mode: "zombie",   size: 1 }); };
 $("btnPlayRush").onclick   = () => { sndClick(); startMatch({ mode: "bossrush", size: 1 }); };
 $("btnPlayCTF").onclick    = () => { sndClick(); startMatch({ mode: "ctf",      size: +$("ctfSlider").value }); };
+$("btnPlaySoccer").onclick = () => { sndClick(); startMatch({ mode: "soccer",   size: +$("soccerSlider").value }); };
+$("btnPlayRace").onclick   = () => { sndClick(); startMatch({ mode: "race",      size: +$("raceSlider").value }); };
 $("btnModeBack").onclick  = () => { sndClick(); goMenu(); };
 
 // ---------- map select (30 maps + a random option) ----------
@@ -2225,6 +2244,7 @@ function makeFighter(x, y, mech, gun, isPlayer, name, team) {
            r: Math.round((15 + Math.round(mech.hp / 50)) * funScale()),   // bigger health = bigger mech
            hp: mech.hp, maxHp: mech.hp, speed: mech.speed,
            cooldown: 0, aim: 0, alive: true, lastHurt: -99, walk: 0, hitFlash: 0, dashCd: 0, dashT: 0, slipT: 0,
+           cpIdx: 0, cpDone: 0, finished: false,   // 🏁 race progress
            sayTxt: "", sayT: 0, emote: "", emoteT: 0, spdT: 0, dmgT: 0, shieldT: 0, ladderIdx: 0, respawnT: null,
            superChg: 0, superFire: 0, frozenT: 0,
            wx: x, wy: y, wanderT: 0, strafeDir: 1, strafeT: 1, aimErr: 0.14 + Math.random() * 0.18 };
@@ -2252,6 +2272,8 @@ function botGun(boost) {
 let matchMode = "ffa", matchTeamSize = 0, lastCfg = { mode: "ffa", size: 6 }, difficulty = 0, matchTotal = 0;
 let wave = 0, waveDelay = 0, wavePending = false, gungameWinner = null;
 let flags = [], ctfScore = { A: 0, B: 0 }, ctfTarget = 3;   // 🚩 Capture the Flag state
+let ball = null, goals = [], soccerScore = { A: 0, B: 0 }, soccerTarget = 3;   // ⚽ Mech Soccer
+let checkpoints = [];   // 🏁 Race checkpoints (index 0 is the start/finish line)
 let towerHelpers = [];   // 🤝 your Tower Climb squad (remembered so they climb every floor with you)
 let towerChoosing = false;   // 🗼 true while you're picking a boss power (game frozen)
 
@@ -2284,11 +2306,11 @@ function botNameFor() {
 
 function startMatch(cfg) {
   cfg = cfg || lastCfg;
-  const validModes = ["ffa", "teams", "boss", "survival", "gungame", "tower", "zombie", "bossrush", "ctf"];
+  const validModes = ["ffa", "teams", "boss", "survival", "gungame", "tower", "zombie", "bossrush", "ctf", "soccer", "race"];
   matchMode = validModes.includes(cfg.mode) ? cfg.mode : "ffa";
   const solo = matchMode === "zombie" || matchMode === "bossrush";   // zombie / boss-rush are always SOLO
   const size = solo ? 1
-             : clamp(Math.round(cfg.size) || 6, (matchMode === "ffa" || matchMode === "gungame") ? 2 : 1, 50);
+             : clamp(Math.round(cfg.size) || 6, (matchMode === "ffa" || matchMode === "gungame" || matchMode === "race") ? 2 : 1, 50);
   matchTeamSize = size;
   lastCfg = { mode: matchMode, size };
   let numBosses = 0;
@@ -2297,6 +2319,7 @@ function startMatch(cfg) {
               : matchMode === "boss" ? size + numBosses
               : matchMode === "survival" ? size + 6   // waves keep coming, so count some extra
               : matchMode === "ctf" ? size * 2
+              : matchMode === "soccer" ? size * 2
               : matchMode === "tower" ? 6
               : matchMode === "zombie" ? 24    // the horde is huge
               : matchMode === "bossrush" ? 10
@@ -2324,7 +2347,7 @@ function startMatch(cfg) {
 
   // you — team "A" in team/boss/survival mode, or your own solo team in FFA
   const onTeam = matchMode === "teams" || matchMode === "boss" || matchMode === "survival"
-              || matchMode === "zombie" || matchMode === "bossrush" || matchMode === "ctf";
+              || matchMode === "zombie" || matchMode === "bossrush" || matchMode === "ctf" || matchMode === "soccer";
   const myMech = MECHS[save.mechEquipped];
   const pr = 15 + Math.round(myMech.hp / 50);
   const pSpot = findSpot(pr, null, 0, onTeam ? leftReg : null);
@@ -2389,6 +2412,13 @@ function startMatch(cfg) {
       x.guardOff = (i * 53 % 160) - 80; x.guardOff2 = (i * 71 % 200) - 100;
     }));
     setupFlags();
+  } else if (matchMode === "soccer") {
+    for (let i = 0; i < size - 1; i++) addBot("A", leftReg, false);   // your 🔵 blue team
+    for (let i = 0; i < size; i++)     addBot("B", rightReg, true);   // the 🔴 red team
+    setupSoccer();
+  } else if (matchMode === "race") {
+    for (let i = 0; i < size - 1; i++) addBot("ffa" + i, null, true); // racers — everyone for themselves
+    setupRace();
   } else {
     for (let i = 0; i < size - 1; i++) addBot("ffa" + i, null, true); // everyone for themselves (buffed)
   }
@@ -2411,6 +2441,8 @@ function startMatch(cfg) {
   powerups = []; powerT = 8;
   wave = 0; waveDelay = 1.5; wavePending = false; gungameWinner = null;
   ctfScore = { A: 0, B: 0 };
+  if (matchMode !== "soccer") { ball = null; goals = []; soccerScore = { A: 0, B: 0 }; }
+  if (matchMode !== "race") checkpoints = [];
   towerChoosing = false; $("towerPanel").classList.add("hidden");
   nameDeck = [];   // fresh shuffle of bot names every match
   moveStick = null; aimStick = null; dashPressed = false;
@@ -2423,6 +2455,8 @@ function startMatch(cfg) {
                 : matchMode === "zombie" ? " — 🧟 ZOMBIE HORDE — survive as long as you can!"
                 : matchMode === "bossrush" ? " — 👹 BOSS RUSH — how many bosses can you beat?"
                 : matchMode === "ctf" ? " — 🚩 CAPTURE THE FLAG — first team to " + ctfTarget + " grabs wins!"
+                : matchMode === "soccer" ? " — ⚽ MECH SOCCER — kick the ball into their goal! First to " + soccerTarget + "!"
+                : matchMode === "race" ? " — 🏁 RACE — blast your rivals and reach the finish first!"
                 : " — " + size + "-player FREE FOR ALL — GO!";
   banner("🗺️ " + curMap.name + modeMsg, "#22d3ee");
   if (curMap.hazard) banner("⚡ BONUS MAP — watch out, it shoots bullets!", "#ffca3a");
@@ -2662,6 +2696,99 @@ function updateCtfBot(b, dt) {
   }
 }
 
+// ⚽ MECH SOCCER — set up an open pitch with a ball and two goals
+function setupSoccer() {
+  soccerScore = { A: 0, B: 0 };
+  blocks = [];   // clear the pitch so the ball rolls freely
+  const gh = Math.min(360, WORLD.h * 0.5), cy = WORLD.h / 2;
+  goals = [
+    { team: "A", side: "left",  color: "#3b82f6", y0: cy - gh / 2, y1: cy + gh / 2 },
+    { team: "B", side: "right", color: "#ef4444", y0: cy - gh / 2, y1: cy + gh / 2 },
+  ];
+  ball = { x: WORLD.w / 2, y: WORLD.h / 2, vx: 0, vy: 0, r: 22 };
+}
+function scoreGoal(team) {
+  soccerScore[team] = (soccerScore[team] || 0) + 1;
+  const mine = team === player.team;   // you are team "A"
+  sndFanfare(mine);
+  banner((mine ? "⚽ GOOOAL! Your team scores!  " : "😱 They scored!  ") + "🔵 " + soccerScore.A + " — " + soccerScore.B + " 🔴", mine ? "#7CFC98" : "#ff9b9b");
+  if (mine) { bonusCoins += 150; floaty(player.x, player.y - 44, "⚽ GOAL +150 🪙", "#f5c542"); }
+  ball.x = WORLD.w / 2; ball.y = WORLD.h / 2; ball.vx = 0; ball.vy = 0;   // kick off from center again
+  shake = Math.max(shake, 10); flash = Math.max(flash, 0.4);
+}
+function updateBall(dt) {
+  if (!ball) return;
+  ball.x += ball.vx * dt; ball.y += ball.vy * dt;
+  const fr = 1 - 2.2 * dt; ball.vx *= fr; ball.vy *= fr;   // rolling friction
+  const gh2 = (goals[0].y1 - goals[0].y0) / 2, cy = WORLD.h / 2, inGoalY = Math.abs(ball.y - cy) < gh2;
+  if (ball.y < ball.r) { ball.y = ball.r; ball.vy = Math.abs(ball.vy) * 0.7; }
+  if (ball.y > WORLD.h - ball.r) { ball.y = WORLD.h - ball.r; ball.vy = -Math.abs(ball.vy) * 0.7; }
+  if (ball.x < ball.r) { if (inGoalY) { scoreGoal("B"); return; } ball.x = ball.r; ball.vx = Math.abs(ball.vx) * 0.7; }
+  if (ball.x > WORLD.w - ball.r) { if (inGoalY) { scoreGoal("A"); return; } ball.x = WORLD.w - ball.r; ball.vx = -Math.abs(ball.vx) * 0.7; }
+  for (const f of fighters()) {   // mechs kick the ball on contact
+    if (!f.alive) continue;
+    const dx = ball.x - f.x, dy = ball.y - f.y, d = Math.hypot(dx, dy);
+    if (d < f.r + ball.r && d > 0) {
+      const nx = dx / d, ny = dy / d, kick = 380 + f.speed * 0.7;
+      ball.vx = nx * kick; ball.vy = ny * kick;
+      ball.x = f.x + nx * (f.r + ball.r + 1); ball.y = f.y + ny * (f.r + ball.r + 1);
+    }
+  }
+  const sp = Math.hypot(ball.vx, ball.vy);
+  if (sp > 950) { ball.vx = ball.vx / sp * 950; ball.vy = ball.vy / sp * 950; }
+}
+// ⚽ soccer bot: get behind the ball and shove it toward the enemy goal (shoots rivals too)
+function updateSoccerBot(b, dt) {
+  b.cooldown -= dt;
+  let tgt = null, bd = Infinity;
+  for (const f of fighters()) { if (!f.alive || f.team === b.team) continue; const d = dist(b, f); if (d < bd) { bd = d; tgt = f; } }
+  const canFight = tgt && bd < 470 && canSee(b, tgt);
+  if (canFight) { b.aim = Math.atan2(tgt.y - b.y, tgt.x - b.x) + (Math.random() - 0.5) * b.aimErr; tryShoot(b, b.aim); }
+  const enemyGoalX = b.team === "A" ? WORLD.w : 0, dir = enemyGoalX > ball.x ? 1 : -1;
+  const gx = ball.x - dir * 48, gy = ball.y, a = Math.atan2(gy - b.y, gx - b.x);
+  moveFighter(b, Math.cos(a) * b.speed * 0.86 * dt, Math.sin(a) * b.speed * 0.86 * dt);
+  if (!canFight) b.aim = Math.atan2(ball.y - b.y, ball.x - b.x);
+}
+
+// 🏁 RACE — lay out a loop of checkpoints; everyone lines up at the start
+function setupRace() {
+  const W = WORLD.w, H = WORLD.h, m = Math.min(240, W * 0.15);
+  const pts = [
+    { x: m, y: H / 2 }, { x: m, y: m }, { x: W / 2, y: m }, { x: W - m, y: m },
+    { x: W - m, y: H / 2 }, { x: W - m, y: H - m }, { x: W / 2, y: H - m }, { x: m, y: H - m },
+  ];
+  checkpoints = pts.map((p, i) => ({ x: p.x, y: p.y, i }));
+  fighters().forEach((f, i) => {
+    f.x = checkpoints[0].x + (i % 3) * 48 - 48; f.y = checkpoints[0].y + Math.floor(i / 3) * 48 - 48;
+    f.cpIdx = 1; f.cpDone = 0; f.finished = false; f.alive = true; f.hp = f.maxHp; f.respawnT = null;
+    f.aim = 0;
+  });
+}
+function updateRace(dt) {
+  const N = checkpoints.length;
+  for (const f of fighters()) {
+    if (!f.alive || f.finished) continue;
+    const t = checkpoints[f.cpIdx];
+    if (Math.hypot(f.x - t.x, f.y - t.y) < 92) {
+      f.cpDone++;
+      if (f.cpIdx === 0) { f.finished = true; if (f.isPlayer) banner("🏁 FINISH!", "#f5c542"); }
+      else f.cpIdx = (f.cpIdx + 1) % N;
+    }
+  }
+}
+// 🏁 race bot: drive to the next checkpoint, blasting anyone in the way
+function updateRaceBot(b, dt) {
+  b.cooldown -= dt;
+  if (b.finished) return;
+  let tgt = null, bd = Infinity;
+  for (const f of fighters()) { if (!f.alive || f === b) continue; const d = dist(b, f); if (d < bd) { bd = d; tgt = f; } }
+  const canFight = tgt && bd < 400 && canSee(b, tgt);
+  if (canFight) { b.aim = Math.atan2(tgt.y - b.y, tgt.x - b.x) + (Math.random() - 0.5) * b.aimErr; tryShoot(b, b.aim); }
+  const cp = checkpoints[b.cpIdx], a = Math.atan2(cp.y - b.y, cp.x - b.x);
+  moveFighter(b, Math.cos(a) * b.speed * 0.92 * dt, Math.sin(a) * b.speed * 0.92 * dt);
+  if (!canFight) b.aim = a;
+}
+
 function banner(txt, color = "#fff") { banners.unshift({ txt, color, life: 3 }); banners = banners.slice(0, 4); }
 function floaty(x, y, txt, color = "#fff") { floaties.push({ x, y, txt, color, life: 1 }); }
 // ✨ drop a colored dot of your trail behind the mech
@@ -2788,7 +2915,8 @@ function hurt(f, dmg, killer) {
     // 🔫 GUN GAME: every kill climbs the killer to the next gun; a kill with the LAST gun wins!
     // (runs AFTER the kill-credit above so the winning kill's coins get banked too.
     //  No "alive" check — a rocket fired before you died still counts when it lands!)
-    if (matchMode === "ctf") f.respawnT = 4;   // 🚩 respawn back at base — CTF is about flags, not kills
+    if (matchMode === "ctf" || matchMode === "soccer") f.respawnT = 4;   // 🚩⚽ respawn — these modes aren't about kills
+    if (matchMode === "race") f.respawnT = 3;   // 🏁 quick respawn back at your last checkpoint
     if (matchMode === "gungame") {
       f.respawnT = 3;   // nobody stays dead in Gun Game
       if (killer) {
@@ -2811,6 +2939,8 @@ function updateBot(b, dt) {
   b.cooldown -= dt;
   if (b.frozenT > 0) { b.frozenT -= dt; b.hitFlash = 0.1; return; }   // ❄️ frozen — can't move or shoot
   if (matchMode === "ctf") { updateCtfBot(b, dt); return; }           // 🚩 flag-focused brain
+  if (matchMode === "soccer") { updateSoccerBot(b, dt); return; }     // ⚽ chase the ball
+  if (matchMode === "race") { updateRaceBot(b, dt); return; }         // 🏁 chase the checkpoints
   // nearest enemy by distance — cheap, no line-of-sight yet (keeps big battles fast)
   let target = null, bestD = Infinity;
   for (const f of fighters()) {
@@ -2891,6 +3021,8 @@ function endMatch(won, leftEarly) {
                : matchMode === "gungame" ? "🏆 GUN GAME CHAMPION!"
                : matchMode === "tower" ? "🏆 EPIC CLIMB — floor " + wave + "!"
                : matchMode === "ctf" ? "🏆 FLAG VICTORY! 🔵 " + ctfScore.A + " — " + ctfScore.B + " 🔴"
+               : matchMode === "soccer" ? "🏆 SOCCER WIN! 🔵 " + soccerScore.A + " — " + soccerScore.B + " 🔴"
+               : matchMode === "race" ? "🏆 YOU WON THE RACE! 🏁"
                : "🏆 VICTORY!")
       : (matchMode === "gungame" && gungameWinner ? "💥 " + gungameWinner + " won the Gun Game"
          : matchMode === "survival" ? "🌊 You fell on wave " + wave
@@ -2898,6 +3030,8 @@ function endMatch(won, leftEarly) {
          : matchMode === "zombie" ? "🧟 The horde got you — you survived " + Math.max(0, wave - 1) + " waves!"
          : matchMode === "bossrush" ? "👹 You beat " + Math.max(0, wave - 1) + " bosses!"
          : matchMode === "ctf" ? "🚩 DEFEAT — 🔵 " + ctfScore.A + " — " + ctfScore.B + " 🔴"
+         : matchMode === "soccer" ? "⚽ DEFEAT — 🔵 " + soccerScore.A + " — " + soccerScore.B + " 🔴"
+         : matchMode === "race" ? "🏁 A rival crossed the finish first!"
          : matchMode === "teams" ? "💥 DEFEAT — your team lost"
          : matchMode === "boss" ? "💥 DEFEAT — the bosses won"
          : "💥 You placed #" + place);
@@ -2914,6 +3048,8 @@ function endMatch(won, leftEarly) {
       (matchMode === "zombie" ? "🧟 Waves survived: " + Math.max(0, wave - 1) + "<br>" : "") +
       (matchMode === "bossrush" ? "👹 Bosses beaten: " + Math.max(0, wave - 1) + "<br>" : "") +
       (matchMode === "ctf" ? "🚩 Final score: 🔵 " + ctfScore.A + " — " + ctfScore.B + " 🔴<br>" : "") +
+      (matchMode === "soccer" ? "⚽ Final score: 🔵 " + soccerScore.A + " — " + soccerScore.B + " 🔴<br>" : "") +
+      (matchMode === "race" ? "🏁 Checkpoints passed: " + player.cpDone + " / " + checkpoints.length + "<br>" : "") +
       "🎯 Kills: " + matchKills + " → +" + (matchKills * killCoins()) + " 🪙<br>" +
       "🎮 Played: +" + playCoins() + " 🪙<br>" +
       (won ? "🏆 Win bonus: +" + winCoins() + " 🪙<br>" : "") +
@@ -3245,6 +3381,34 @@ function update(dt) {
     updateFlags(dt);
     if (ctfScore.A >= ctfTarget) { endMatch(true); return; }
     if (ctfScore.B >= ctfTarget) { endMatch(false); return; }
+  } else if (matchMode === "soccer") {
+    // ⚽ nobody stays dead — respawn on your own half after 4s
+    for (const f of fighters()) if (!f.alive && f.respawnT != null) {
+      f.respawnT -= dt;
+      if (f.respawnT <= 0) {
+        const hx = f.team === "A" ? WORLD.w * 0.22 : WORLD.w * 0.78;
+        f.x = hx + (Math.random() - 0.5) * 240; f.y = WORLD.h / 2 + (Math.random() - 0.5) * 420;
+        f.hp = f.maxHp; f.alive = true; f.respawnT = null; f.hitFlash = 0;
+        if (f.isPlayer) { banner("🔁 Respawned!", "#7ce0ff"); cam.x = f.x - canvas.width / 2; cam.y = f.y - canvas.height / 2; }
+      }
+    }
+    updateBall(dt);
+    if (soccerScore.A >= soccerTarget) { endMatch(true); return; }
+    if (soccerScore.B >= soccerTarget) { endMatch(false); return; }
+  } else if (matchMode === "race") {
+    updateRace(dt);
+    // knocked out? respawn at your last checkpoint after 3s (losing time)
+    for (const f of fighters()) if (!f.alive && f.respawnT != null) {
+      f.respawnT -= dt;
+      if (f.respawnT <= 0) {
+        const cp = checkpoints[(f.cpIdx - 1 + checkpoints.length) % checkpoints.length];
+        f.x = cp.x + (Math.random() - 0.5) * 70; f.y = cp.y + (Math.random() - 0.5) * 70;
+        f.hp = f.maxHp; f.alive = true; f.respawnT = null; f.hitFlash = 0;
+        if (f.isPlayer) { banner("🔁 Back on track!", "#7ce0ff"); cam.x = f.x - canvas.width / 2; cam.y = f.y - canvas.height / 2; }
+      }
+    }
+    if (player.finished) { endMatch(true); return; }
+    if (bots.some(b => b.finished)) { endMatch(false); return; }
   } else {
     const enemyAlive = bots.some(b => b.alive && b.team !== player.team);
     if (!enemyAlive) endMatch(true);
@@ -3474,6 +3638,30 @@ function draw() {
     ctx.textBaseline = "alphabetic";
   }
 
+  // ⚽ soccer goals + ball
+  if (matchMode === "soccer") {
+    const gw = 28;
+    for (const g of goals) {
+      const gx = g.side === "left" ? 0 : WORLD.w - gw;
+      ctx.globalAlpha = 0.22; ctx.fillStyle = g.color; ctx.fillRect(gx, g.y0, gw, g.y1 - g.y0);
+      ctx.globalAlpha = 0.9; ctx.strokeStyle = g.color; ctx.lineWidth = 5; ctx.strokeRect(gx, g.y0, gw, g.y1 - g.y0);
+      ctx.globalAlpha = 1;
+    }
+    if (ball) {
+      ctx.font = (ball.r * 2) + "px Arial"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText("⚽", ball.x, ball.y); ctx.textBaseline = "alphabetic";
+    }
+  }
+  // 🏁 race checkpoints (your next one glows, the finish is the flag)
+  if (matchMode === "race") for (const cp of checkpoints) {
+    const isNext = player.alive && !player.finished && cp.i === player.cpIdx, isFinish = cp.i === 0;
+    ctx.strokeStyle = isFinish ? "#f5c542" : (isNext ? "#22d3ee" : "#5b6488");
+    ctx.lineWidth = isNext ? 7 : 3; ctx.globalAlpha = isNext ? 0.95 : 0.5;
+    ctx.beginPath(); ctx.arc(cp.x, cp.y, 60, 0, 7); ctx.stroke(); ctx.globalAlpha = 1;
+    ctx.font = "28px Arial"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText(isFinish ? "🏁" : (isNext ? "⬇️" : "•"), cp.x, cp.y); ctx.textBaseline = "alphabetic";
+  }
+
   // bullets — each gun type looks like its name
   for (const bu of bullets) {
     const ty = bu.type;
@@ -3656,6 +3844,11 @@ function draw() {
     ctx.fillText("👹 BOSS " + Math.max(1, wave), canvas.width - 20, 84);
   } else if (matchMode === "ctf") {
     ctx.fillText("🚩 🔵 " + ctfScore.A + " — " + ctfScore.B + " 🔴  (to " + ctfTarget + ")", canvas.width - 20, 84);
+  } else if (matchMode === "soccer") {
+    ctx.fillText("⚽ 🔵 " + soccerScore.A + " — " + soccerScore.B + " 🔴  (to " + soccerTarget + ")", canvas.width - 20, 84);
+  } else if (matchMode === "race") {
+    const place = 1 + fighters().filter(f => f !== player && (f.finished || f.cpDone > player.cpDone)).length;
+    ctx.fillText("🏁 CP " + player.cpDone + "/" + checkpoints.length + "  •  #" + place, canvas.width - 20, 84);
   } else {
     const alive = fighters().filter(f => f.alive).length;
     ctx.fillText("🤖 " + alive + " LEFT", canvas.width - 20, 84);
