@@ -513,7 +513,7 @@
     <button data-say="retreat!">🏃 RETREAT</button>
   </div>
   <div id="chatRow">
-    <input id="chatInput" type="text" placeholder="type to your team..." autocomplete="off" spellcheck="false" maxlength="60">
+    <input id="chatInput" type="text" placeholder="tell your team: attack, follow, defend, spread, retreat..." autocomplete="off" spellcheck="false" maxlength="60">
     <button class="btn" id="btnChatSend">SEND</button>
     <button class="btn" id="btnChatClose">✖</button>
   </div>
@@ -1871,13 +1871,15 @@ function closeChat() {
   for (const k in keys) keys[k] = false;
 }
 // figure out what order the player is giving (forgiving keyword match)
+// understand LOTS of ways to say each order (punctuation/emoji ignored)
 function parseOrder(t) {
-  t = t.toLowerCase();
-  if (/attack|charge|kill|fight|shoot|get (them|him|the boss)|go go/.test(t)) return "attack";
-  if (/follow|come|with me|to me|here/.test(t)) return "follow";
-  if (/defend|protect|guard|cover|stay (close|with)/.test(t)) return "defend";
-  if (/spread|split|scatter/.test(t)) return "spread";
-  if (/retreat|fall back|run|hide|flee|back off/.test(t)) return "retreat";
+  t = " " + t.toLowerCase().replace(/[^a-z ]/g, " ").replace(/\s+/g, " ") + " ";
+  // RETREAT first, so "run away" / "back off" win over other words
+  if (/ (retreat|run|runaway|hide|flee|escape|bail|abort|danger|scared|chicken) |fall ?back|back ?off|pull ?back|get out|go back|too (strong|many|hard)|were losing|we re losing/.test(t)) return "retreat";
+  if (/ (attack|charge|kill|fight|shoot|rush|push|destroy|blast|smash|wreck|waste|hunt|engage|blitz|storm|offense|offence|aggro) |get (them|him|her|it|that|the)|take (them|him|it|her) (out|down)|go (get|kill|attack|in|go)|send it|all in|let ?s go|light em up|kill em/.test(t)) return "attack";
+  if (/ (follow|come|regroup|group|here|help) |follow me|with me|to me|on me|by me|near me|stick (together|with)|stay (near|with|by)|right here|come (here|with|to|back)|help me|group up|form up/.test(t)) return "follow";
+  if (/ (defend|protect|guard|cover|shield|hold|block|wait|stop) |back me up|watch (out|my|me)|keep me (safe|alive)|don ?t let|stay close|hold (the )?line|hold (position|up)|cover me|protect me|defend me/.test(t)) return "defend";
+  if (/ (spread|split|scatter|separate|divide|roam|everywhere) |go wide|fan out|spread out|split up|all over|spread em/.test(t)) return "spread";
   return null;
 }
 const ORDER_REPLIES = {
@@ -1899,7 +1901,9 @@ function sendChat(raw) {
   player.sayTxt = txt.slice(0, 26); player.sayT = 3;
   const mates = bots.filter(b => b.alive && b.team === player.team);
   const order = parseOrder(txt);
-  if (order && mates.length) {
+  if (order && !mates.length) {
+    banner("🤖 No squad here! Orders work in Teams, Boss, Survival, CTF & Soccer.", "#ffca3a");
+  } else if (order && mates.length) {
     squadOrder = order;
     banner("🫡 Squad order: " + order.toUpperCase() + "!", "#7CFC98");
     const talkers = [...mates].sort(() => Math.random() - 0.5).slice(0, Math.min(2, mates.length));
