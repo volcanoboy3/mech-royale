@@ -2775,12 +2775,22 @@ function updateBall(dt) {
   if (ball.y > WORLD.h - ball.r) { ball.y = WORLD.h - ball.r; ball.vy = -Math.abs(ball.vy) * 0.7; }
   if (ball.x < ball.r) { if (inGoalY) { scoreGoal("B"); return; } ball.x = ball.r; ball.vx = Math.abs(ball.vx) * 0.7; }
   if (ball.x > WORLD.w - ball.r) { if (inGoalY) { scoreGoal("A"); return; } ball.x = WORLD.w - ball.r; ball.vx = -Math.abs(ball.vx) * 0.7; }
-  for (const f of fighters()) {   // mechs kick the ball on contact
+  for (const f of fighters()) {   // mechs kick the ball on contact — toward THEIR goal
     if (!f.alive) continue;
+    f.ballCd = Math.max(0, (f.ballCd || 0) - dt);   // brief cooldown so one mech can't glue the ball
     const dx = ball.x - f.x, dy = ball.y - f.y, d = Math.hypot(dx, dy);
-    if (d < f.r + ball.r && d > 0) {
-      const nx = dx / d, ny = dy / d, kick = 500 + f.speed * 0.8;
-      ball.vx = nx * kick; ball.vy = ny * kick;
+    if (d < f.r + ball.r && d > 0 && f.ballCd <= 0) {
+      f.ballCd = 0.22;
+      const nx = dx / d, ny = dy / d, kick = 520 + f.speed * 0.8;
+      // aim mostly at the goal this mech is attacking (at a spread-out spot in the mouth, not dead center,
+      // so shots beat the keeper), blended with the contact angle so you can still redirect
+      const goalX = f.team === "A" ? WORLD.w : (f.team === "B" ? 0 : (f.x < WORLD.w / 2 ? WORLD.w : 0));
+      const gh = goals.length ? goals[0].y1 - goals[0].y0 : WORLD.h * 0.6;
+      const aimY = WORLD.h / 2 + (Math.random() - 0.5) * gh * 0.72;   // spread shots around the goal (not dead center)
+      const ax = goalX - ball.x, ay = aimY - ball.y, al = Math.hypot(ax, ay) || 1;
+      let kx = ax / al * 0.62 + nx * 0.38, ky = ay / al * 0.62 + ny * 0.38;
+      const kl = Math.hypot(kx, ky) || 1;
+      ball.vx = kx / kl * kick; ball.vy = ky / kl * kick;
       ball.x = f.x + nx * (f.r + ball.r + 1); ball.y = f.y + ny * (f.r + ball.r + 1);
     }
   }
@@ -2797,23 +2807,23 @@ function updateSoccerBot(b, dt) {
   if (canFight) { b.aim = Math.atan2(tgt.y - b.y, tgt.x - b.x) + (Math.random() - 0.5) * b.aimErr; tryShoot(b, b.aim); }
 
   const goalX = b.team === "A" ? WORLD.w : 0, ownGoalX = b.team === "A" ? 0 : WORLD.w, goalY = WORLD.h / 2;
-  let myTeamNear = Infinity, foeNear = Infinity, iAmClosest = true;
+  let myTeamNear = Infinity, foeNear = Infinity, myRank = 0;   // myRank = teammates closer to the ball than me
   const myD = Math.hypot(b.x - ball.x, b.y - ball.y);
   for (const f of fighters()) {
     if (!f.alive) continue;
     const d = Math.hypot(f.x - ball.x, f.y - ball.y);
-    if (f.team === b.team) { myTeamNear = Math.min(myTeamNear, d); if (f !== b && d < myD) iAmClosest = false; }
+    if (f.team === b.team) { myTeamNear = Math.min(myTeamNear, d); if (f !== b && d < myD) myRank++; }
     else foeNear = Math.min(foeNear, d);
   }
   const weHaveBall = myTeamNear <= foeNear;
   let gx, gy;
-  if (iAmClosest && weHaveBall) {   // DRIBBLE: get on the far side of the ball → each touch drives it goal-ward
+  if (weHaveBall && myRank === 0) {   // DRIBBLE: get on the far side of the ball → each touch drives it goal-ward
     const bx = ball.x - goalX, by = ball.y - goalY, bl = Math.hypot(bx, by) || 1;
     gx = ball.x + bx / bl * 44; gy = ball.y + by / bl * 44;
-  } else if (iAmClosest && !weHaveBall) {   // KEEPER: guard our own goal, tracking the ball's height
-    gx = ownGoalX + (b.team === "A" ? 190 : -190); gy = clamp(ball.y, goalY - 280, goalY + 280);
-  } else {   // SUPPORT: spread up-field toward their goal, ready to receive
-    gx = (ball.x + goalX) / 2; gy = clamp(goalY + (b.guardOff2 || (b.r * 7 % 300 - 150)) * 1.5, 80, WORLD.h - 80);
+  } else if (!weHaveBall && myRank === 0) {   // KEEPER: guard our goal but only the middle — corners stay open
+    gx = ownGoalX + (b.team === "A" ? 150 : -150); gy = clamp(ball.y, goalY - 250, goalY + 250);
+  } else {   // SUPPORT: push up-field toward their goal, ready to receive and pressure
+    gx = (ball.x + goalX) / 2 + (goalX - ball.x) * 0.25; gy = clamp(goalY + (b.guardOff2 || (b.r * 7 % 300 - 150)) * 1.5, 80, WORLD.h - 80);
   }
   const a = driveTo(b, gx, gy, dt, 0.9);
   if (!canFight) b.aim = Math.atan2(ball.y - b.y, ball.x - b.x);
