@@ -1,4 +1,5 @@
-assets/
+assets/*
+!assets/terrain-atlas-v1.jpg
 node_modules
 .git
 *.md
