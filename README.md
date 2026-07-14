@@ -22,6 +22,7 @@ A fast top-down mech battle-royale you play right in your browser. Pick a mech, 
 - 🏪 **Mech Store & Gun Store** — spend coins you earn from kills and wins
 - ⚡ **Dash** move to dodge, 🧱 **blocks** to hide behind, ❤️ **health packs** to heal
 - 📱 **Plays on phones** with twin thumbsticks, plus 🗺️ minimap, 🔥 kill streaks & juicy effects
+- 🌐 **Automatic online matchmaking when hosted** — real players take over CPU slots in Free For All, Teams, Gun Game, Capture the Flag, Soccer, and Race; CPUs fill every empty slot
 - 🔑 **Secret codes** for bonus coins (shhh — you have to know them!)
 - ⏸️ Pause, 🔊 mute, and everything **auto-saves** in your browser
 
@@ -34,6 +35,12 @@ A fast top-down mech battle-royale you play right in your browser. Pick a mech, 
 | **Space** | Dash |
 | **P** | Pause |
 | **Esc** | Leave match |
+
+## 🌐 Online matches
+
+Nothing needs to be switched on in the game. When the site is posted online over HTTPS, supported battle modes automatically look for real players using the same mode, player count, and map. Each person who connects replaces one CPU. If nobody else is playing, or somebody disconnects, CPU control fills the slot immediately.
+
+Opening `index.html` directly, or running it on `localhost`, always keeps the game offline and CPU-only. Online matchmaking uses encrypted browser-to-browser connections and does not require player accounts.
 
 ## 🏆 How to win
 Wander the arena, hide behind blocks, grab health packs, and knock out all 5 enemy mechs. Earn coins → buy better mechs and guns → upgrade them → dominate. Coins come from kills (+20), playing (+15), and winning (+150).
