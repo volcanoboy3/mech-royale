@@ -7,3 +7,4 @@ ios/App/Pods
 ios/App/DerivedData
 assets/*
 !assets/terrain-atlas-v1.jpg
+!assets/app-icon-source.png

@@ -1,0 +1,11 @@
+{
+  "appId": "com.volcanoboy3.mechroyale",
+  "appName": "Mech Royale",
+  "webDir": "dist",
+  "ios": {
+    "backgroundColor": "#0f1220",
+    "contentInset": "always",
+    "preferredContentMode": "mobile",
+    "allowsLinkPreview": false
+  }
+}

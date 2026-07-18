@@ -1,6 +1,6 @@
 # 🤖 Mech Royale
 
-A fast top-down mech battle-royale you play right in your browser. Pick a mech, bolt on a gun, and be the **last mech standing** against 5 enemy bots. One single HTML file — no downloads, no installs.
+A fast top-down mech battle-royale for browsers and iPhone. Pick a mech, bolt on a gun, and be the **last mech standing** against enemy bots or online players.
 
 **▶ Play:** open `index.html` (double-click it) or visit the live site.
 
@@ -63,6 +63,22 @@ It's just one file, so any static server works:
 python3 -m http.server 8000
 # then open http://localhost:8000
 ```
+
+## 📱 Build the iPhone app
+
+The native iPhone project lives in `ios/` and uses a generated copy of the web
+game. It runs full-screen in landscape with a movement joystick on the left and
+an aim-and-fire joystick on the right.
+
+```bash
+npm install
+npm run ios:sync
+npm run ios:open
+```
+
+The last command requires the full Xcode app. App Store signing, iPhone testing,
+TestFlight, privacy details, and publishing steps are in
+[`docs/APP_STORE_CHECKLIST.md`](docs/APP_STORE_CHECKLIST.md).
 
 ## 💰 Turning on real ads (for a grown-up)
 The game ships with safe **pretend ads** (rewarded "watch for coins", a lose-screen interstitial, and occasional menu pop-ups) already wired through one function. To make them real, money-earning ads:
