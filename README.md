@@ -25,6 +25,7 @@ A fast top-down mech battle-royale you play right in your browser. Pick a mech, 
 - 🌐 **Automatic online matchmaking when hosted** — real players take over CPU slots in Free For All, Teams, Gun Game, Capture the Flag, Soccer, and Race; CPUs fill every empty slot
 - 🔑 **Secret codes** for bonus coins (shhh — you have to know them!)
 - ⏸️ Pause, 🔊 mute, and everything **auto-saves** in your browser
+- ☁️ Optional player accounts keep progress synced across devices
 
 ## 🎮 Controls
 | Key | Action |
@@ -44,6 +45,17 @@ Opening `index.html` directly, or running it on `localhost`, always keeps the ga
 
 ## 🏆 How to win
 Wander the arena, hide behind blocks, grab health packs, and knock out all 5 enemy mechs. Earn coins → buy better mechs and guns → upgrade them → dominate. Coins come from kills (+20), playing (+15), and winning (+150).
+
+## ☁️ Player accounts and cloud saves
+
+Device saving always works, even when cloud accounts are unavailable. To enable account sign-in and cross-device saves on the hosted game:
+
+1. Create a Supabase project and run `supabase/player_saves.sql` in its SQL editor.
+2. In the Supabase authentication settings, add the live game URL as the Site URL and an allowed redirect URL.
+3. Add `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` to the Vercel project environment variables. A legacy `SUPABASE_ANON_KEY` also works.
+4. Redeploy the site.
+
+The browser receives only the public Supabase key. Row-level security restricts each signed-in player to their own save. On a new device, the game asks whether to use the cloud progress or upload the device progress, and keeps a local backup before replacing anything.
 
 ## 🛠️ Run it locally
 It's just one file, so any static server works:
@@ -74,4 +86,4 @@ The 💎 PACKS shop is fully built — only the payment account is missing:
 
 Flow: BUY opens the Stripe page → buyer pays → sees their code → types it in 🔑 SECRET CODES → the pack's contents are granted. Packs are repeatable: pay again to get the pack again (coins stack; already-owned mechs/guns aren't duplicated).
 
-Made with ❤️ and vanilla JavaScript + HTML canvas.
+Created by Isaac with help from his dad. Made with ❤️ and vanilla JavaScript + HTML canvas.

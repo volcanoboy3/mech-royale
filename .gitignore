@@ -1,5 +1,9 @@
 .DS_Store
 .vercel
 node_modules
+dist
+ios/App/App/public
+ios/App/Pods
+ios/App/DerivedData
 assets/*
 !assets/terrain-atlas-v1.jpg
