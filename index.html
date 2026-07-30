@@ -1437,9 +1437,9 @@
       <option value="common">Common</option><option value="rare">Rare</option><option value="mythic">Mythic</option><option value="legendary" selected>Legendary</option>
     </select>
     <div class="creatorActions">
-      <button class="btn" id="btnCreatorGun">GIVE LEVEL 5 GUN</button>
-      <button class="btn" id="btnCreatorAllGuns">MAX EVERY GUN</button>
-      <button class="btn" id="btnCreatorCoins">ADD 1,000,000 COINS</button>
+      <button class="btn" id="btnCreatorGun">🔫 DAILY GUN TRY-OUT</button>
+      <button class="btn" id="btnCreatorAllGuns">🏅 EARN THEM IN BATTLE</button>
+      <button class="btn" id="btnCreatorCoins">🪙 DAILY BONUS +5,000</button>
       <button class="btn" id="btnCreatorClose">CLOSE VAULT</button>
     </div>
     <div id="creatorStatus"></div>
@@ -4637,19 +4637,28 @@ function tryCreatorAnswer(){
   save.creatorVerified=true;persist();try{localStorage.setItem("mechCreatorVerified_v1","1");}catch(e){}
   closeCreatorGate();renderExpansion();openCreatorVault();sndFanfare(true);
 }
+// the Creator Vault used to print 1,000,000 coins and max every gun for free —
+// but the password ships in the page source, so ANY player could find it and
+// skip the whole game. Now it's a small once-a-day bonus instead. Keeps it fun!
+function creatorDaily(){ if(!save.creatorDaily||save.creatorDaily.day!==todayKey())save.creatorDaily={day:todayKey(),coins:false,gun:false}; return save.creatorDaily; }
 function creatorGiveGun(){
+  const cd=creatorDaily();
+  if(cd.gun){$("creatorStatus").textContent="Gun try-out already used today — come back tomorrow!";return;}
   const type=$("creatorGun").value,rarity=$("creatorRarity").value,key=type+"_"+rarity;
   if(!GUN_TYPES.some(g=>g.id===type)||!RARITIES[rarity])return;
-  save.gunsOwned[key]=MAX_LEVEL;save.gunEquipped=key;persist();refreshLabels();
-  $("creatorStatus").textContent=(baseOf({type}).name)+" is Level 5 and equipped.";sndFanfare(true);
+  if(!save.gunsOwned[key])save.gunsOwned[key]=1;   // Level 1 try-out, once a day — no more free maxed arsenals
+  save.gunEquipped=key;cd.gun=true;persist();refreshLabels();
+  $("creatorStatus").textContent=(baseOf({type}).name)+" unlocked at Level 1 — today's try-out!";sndFanfare(true);
 }
 function creatorMaxAllGuns(){
-  for(const item of GUN_CATALOG)if(!baseOf(item).secret)save.gunsOwned[item.key]=MAX_LEVEL;
-  persist();refreshLabels();$("creatorStatus").textContent="Every store gun is unlocked at Level 5.";sndFanfare(true);
+  $("creatorStatus").textContent="Retired! Guns are earned in battle now — that's what keeps the game fun. 💪";
+  beep(200,.15,"sine",.07,300);
 }
 function creatorAddCoins(){
-  save.coins=Math.min(999999999,save.coins+1000000);persist();refreshLabels();renderCreatorVault();
-  $("creatorStatus").textContent="Added 1,000,000 coins.";sndCoin();
+  const cd=creatorDaily();
+  if(cd.coins){$("creatorStatus").textContent="Daily creator bonus already claimed — come back tomorrow!";return;}
+  save.coins=Math.min(999999999,save.coins+5000);cd.coins=true;persist();refreshLabels();renderCreatorVault();
+  $("creatorStatus").textContent="Creator daily bonus: +5,000 coins.";sndCoin();
 }
 function startStory(i) { const m=STORY_MISSIONS[i];if(!m||i>save.storyLevel)return;storyMission=i;tournamentActive=false;localCoop=false;pendingMapName=m.map;startMatch({mode:m.mode,size:m.size}); }
 function startTournament() { tournamentActive=true;tournamentRound=1;storyMission=-1;localCoop=false;pendingMapName="Storm Front";startMatch({mode:"ffa",size:6}); }
@@ -5539,7 +5548,7 @@ const CODES = [
   { code: "MKXPV8",         reward: "+15000 🪙",  apply: () => save.coins += 15000 },
   { code: "JZQWL5",         reward: "+25000 🪙",  apply: () => save.coins += 25000 },
   { code: "XVNRK2",         reward: "+50000 🪙",  apply: () => save.coins += 50000 },
-  { code: "ZQMXF6",         reward: "+10000000 🪙 (reusable!)", repeatable: true, apply: () => save.coins += 10000000 },
+  { code: "ZQMXF6",         reward: "+20000 🪙",  apply: () => save.coins += 20000 },
 ];
 
 function redeemCode(raw) {
@@ -8608,7 +8617,11 @@ function endMatch(won, leftEarly, reason) {
   try {
     if(won)addContractProgress("wins");
     if(!leftEarly)addContractProgress("matches");
-    if(won&&storyMission>=0){if(storyMission>=save.storyLevel)save.storyLevel=Math.min(STORY_MISSIONS.length,storyMission+1);bonusCoins+=750*(storyMission+1);}
+    if(won&&storyMission>=0){
+      // big reward only the FIRST time you beat a mission — replays pay a small bonus (no coin farming!)
+      if(storyMission>=save.storyLevel){save.storyLevel=Math.min(STORY_MISSIONS.length,storyMission+1);bonusCoins+=750*(storyMission+1);}
+      else bonusCoins+=150;
+    }
     if(tournamentActive){if(won&&tournamentRound<3){tournamentRound++;pendingMapName=["Storm Front","Moving Train","Collapsing City"][tournamentRound-1];lastCfg={mode:"ffa",size:4+tournamentRound*2};}else{if(won){save.tournamentWins++;bonusCoins+=4000;}tournamentActive=false;}}
     // 🎖️ the higher your rank, the bigger your per-win coin reward (+30 per rank tier)
     const xpResult = grantAccountXP(matchXPReward(won, leftEarly));
