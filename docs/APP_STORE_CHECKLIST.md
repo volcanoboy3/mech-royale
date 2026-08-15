@@ -6,7 +6,7 @@ has dual touch joysticks.
 
 ## 1. Finish Apple Setup
 
-- Install the full Xcode app from the Mac App Store.
+- Xcode 26.6 is installed and the iPhone Simulator build has been verified.
 - Join the [Apple Developer Program](https://developer.apple.com/programs/enroll/).
   The account holder must be old enough to
   enter a legal agreement. If Isaac is not old enough, his dad should be the
@@ -69,6 +69,10 @@ and child-safety rules, update the privacy answers, and test the consent flow.
 Apple's [upload guide](https://developer.apple.com/help/app-store-connect/manage-builds/upload-builds)
 has the current Xcode and App Store Connect requirements.
 
-The current Mac has Apple Command Line Tools but not the full Xcode app, so the
-native project cannot be compiled or run in the iPhone Simulator until Xcode is
-installed.
+The Mac currently selects the standalone Command Line Tools by default. For a
+Terminal build, point the command at the full Xcode installation:
+
+```bash
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild \
+  -project ios/App/App.xcodeproj -scheme App
+```
