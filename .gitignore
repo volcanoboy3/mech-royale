@@ -15,3 +15,6 @@ assets/*
 !assets/generated/gpt2-projectiles.png
 !assets/generated/gpt2-mechs-primary.png
 !assets/generated/gpt2-mechs-elite.png
+!assets/maps/
+!assets/maps/raw2/
+!assets/maps/raw2/*.jpg
